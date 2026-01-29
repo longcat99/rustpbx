@@ -5,6 +5,12 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag name for the Docker image'
+        required: false
+        default: 'latest'
 
 jobs:
   build:
@@ -23,14 +29,14 @@ jobs:
       uses: docker/setup-buildx-action@v3
 
     - name: Log in to Docker Hub
-      if: github.event_name == 'push'
+      if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
       uses: docker/login-action@v3
       with:
         username: ${{ secrets.DOCKER_HUB_USERNAME }}
         password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
     - name: Build and push Docker image
-      if: github.event_name == 'push'
+      if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
       uses: docker/build-push-action@v5
       with:
         context: .
@@ -38,7 +44,7 @@ jobs:
         push: true
         tags: |
           longcat99/rustpbx:${{ github.sha }}
-          longcat99/rustpbx:${{ contains(github.event.head_commit.message, '[latest]') && 'latest' || format('{0}', github.run_number) }} 
+          longcat99/rustpbx:${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || contains(github.event.head_commit.message, '[latest]') && 'latest' || format('{0}', github.run_number) }} 
 
     - name: Build Docker image (PR)
       if: github.event_name == 'pull_request'
