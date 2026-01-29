@@ -1,14 +1,17 @@
-FROM --platform=$TARGETPLATFORM rust:bookworm AS rust-builder
-RUN apt-get update && apt-get install -y libasound2-dev libopus-dev cmake
+FROM rust:bookworm AS rust-builder
+RUN apt-get update && apt-get install -y gcc-aarch64-linux-gnu libasound2-dev libopus-dev cmake
+RUN rustup target add aarch64-unknown-linux-gnu
+RUN echo '[target.aarch64-unknown-linux-gnu]' >> ~/.cargo/config.toml && \
+    echo 'linker = "aarch64-linux-gnu-gcc"' >> ~/.cargo/config.toml
 RUN mkdir /build
 ADD . /build/
 WORKDIR /build
 RUN --mount=type=cache,target=/build/.cargo/registry \
-    --mount=type=cache,target=/build/target/release/incremental\
-    --mount=type=cache,target=/build/target/release/build\
-    cargo build --release --bin rustpbx --bin sipflow
+    --mount=type=cache,target=/build/target/aarch64-unknown-linux-gnu/release/incremental\
+    --mount=type=cache,target=/build/target/aarch64-unknown-linux-gnu/release/build\
+    cargo build --release --target aarch64-unknown-linux-gnu --bin rustpbx --bin sipflow
 
-FROM --platform=$TARGETPLATFORM debian:bookworm
+FROM debian:bookworm
 LABEL maintainer="shenjindi@miuda.ai"
 RUN --mount=type=cache,target=/var/apt apt-get update && apt-get install -y ca-certificates tzdata libopus0
 ENV DEBIAN_FRONTEND=noninteractive
@@ -20,8 +23,8 @@ COPY --from=rust-builder /build/src/addons/acme/static /app/static/acme
 COPY --from=rust-builder /build/src/addons/transcript/static /app/static/transcript
 COPY --from=rust-builder /build/src/addons/queue/static /app/static/queue
 
-COPY --from=rust-builder /build/target/release/rustpbx /app/rustpbx
-COPY --from=rust-builder /build/target/release/sipflow /app/sipflow
+COPY --from=rust-builder /build/target/aarch64-unknown-linux-gnu/release/rustpbx /app/rustpbx
+COPY --from=rust-builder /build/target/aarch64-unknown-linux-gnu/release/sipflow /app/sipflow
 COPY --from=rust-builder /build/templates /app/templates
 COPY --from=rust-builder /build/src/addons/acme/templates /app/templates/acme
 COPY --from=rust-builder /build/src/addons/archive/templates /app/templates/archive
