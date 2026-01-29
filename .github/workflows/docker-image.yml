@@ -35,6 +35,12 @@ jobs:
         username: ${{ secrets.DOCKER_HUB_USERNAME }}
         password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
+    - name: Extract version from Cargo.toml
+      id: extract-version
+      run: |
+        VERSION=$(grep '^version =' Cargo.toml | cut -d '"' -f 2)
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+
     - name: Build and push Docker image
       if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
       uses: docker/build-push-action@v5
@@ -44,7 +50,11 @@ jobs:
         push: true
         tags: |
           longcat99/rustpbx:${{ github.sha }}
-          longcat99/rustpbx:${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || contains(github.event.head_commit.message, '[latest]') && 'latest' || format('{0}', github.run_number) }} 
+          longcat99/rustpbx:${{ github.run_number }}
+          longcat99/rustpbx:${{ steps.extract-version.outputs.version }}-${{ github.run_number }}
+          ${{ github.event_name == 'workflow_dispatch' && format('longcat99/rustpbx:{0}', github.event.inputs.tag) || '' }}
+          ${{ contains(github.event.head_commit.message, '[latest]') && 'longcat99/rustpbx:latest' || '' }}
+          ${{ contains(github.event.head_commit.message, '[latest]') && format('longcat99/rustpbx:{0}', steps.extract-version.outputs.version) || '' }}
 
     - name: Build Docker image (PR)
       if: github.event_name == 'pull_request'
@@ -53,4 +63,6 @@ jobs:
         context: .
         platforms: linux/arm64
         push: false
-        tags: longcat99/rustpbx:pr-${{ github.event.pull_request.number }}
+        tags: |
+          longcat99/rustpbx:pr-${{ github.event.pull_request.number }}
+          longcat99/rustpbx:pr-${{ github.event.pull_request.number }}-${{ github.sha }}
