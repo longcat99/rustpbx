@@ -1,0 +1,3082 @@
+{% extends "console/layout.html" %}
+{% block js_ext %}
+<script src="{{jssip_js|default('//jssip.net/download/releases/jssip-3.10.0.js')}}"></script>
+{% endblock %}
+{% block title %}Testing · {{site_name|default('RustPBX')}}{% endblock %}
+{% block content %}
+<div class="p-6">
+    <div class="mx-auto max-w-7xl space-y-6" x-data='testingConsole({{ test_data | tojson }})'>
+        <header class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div class="space-y-1">
+                <p class="text-xs font-semibold uppercase tracking-wide text-sky-600">Operational validation</p>
+                <h1 class="text-2xl font-semibold text-slate-900">Testing & diagnostics</h1>
+                <p class="text-sm text-slate-500">Verify trunk reachability, routing decisions, and place synthetic
+                    calls without leaving the console.</p>
+            </div>
+            <div class="text-xs text-slate-500">
+                Last audit:
+                <span class="font-semibold text-slate-700" x-text="formatDateTime(lastAudit)"></span>
+            </div>
+        </header>
+        <nav
+            class="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1 text-xs font-semibold text-slate-600">
+            <template x-for="tab in tabs" :key="tab.id">
+                <button type="button" @click="selectTab(tab.id)" class="rounded-md px-3 py-1.5 transition"
+                    :class="activeTab === tab.id ? 'bg-white text-sky-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'">
+                    <span x-text="tab.label"></span>
+                </button>
+            </template>
+        </nav>
+
+        <section x-show="activeTab === 'connection'" x-cloak x-transition.opacity>
+            <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h2 class="text-base font-semibold text-slate-900">Connect endpoints quickly</h2>
+                        <p class="text-xs text-slate-500">Copy realm, transports, and working credentials to register
+                            softphones or WebRTC clients.</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                        <span
+                            class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-600">
+                            Realm
+                            <span class="font-mono text-slate-700" x-text="connection.realm || '—'"></span>
+                        </span>
+                        <span
+                            class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-600">
+                            Expires
+                            <span x-text="connection.expires ? connection.expires + ' s' : 'Default 60 s'"></span>
+                        </span>
+                    </div>
+                </div>
+                <div class="mt-4 grid gap-4 md:grid-cols-3">
+                    <div class="space-y-3">
+                        <h3 class="text-sm font-semibold text-slate-800">Server identity</h3>
+                        <dl class="space-y-2 text-xs text-slate-600">
+                            <div class="flex items-center justify-between gap-2">
+                                <dt class="text-slate-500">Realm</dt>
+                                <dd class="font-mono text-slate-700" x-text="connection.realm || '—'"></dd>
+                            </div>
+                            <div class="flex items-center justify-between gap-2">
+                                <dt class="text-slate-500">Host</dt>
+                                <dd class="font-mono text-slate-700" x-text="connection.host || '—'"></dd>
+                            </div>
+                            <div class="flex items-center justify-between gap-2" x-show="connectionAccounts.length">
+                                <dt class="text-slate-500">Sample URI</dt>
+                                <dd class="font-mono text-slate-700" x-text="connectionAccounts[0]?.uri || '—'"></dd>
+                            </div>
+                        </dl>
+                    </div>
+                    <div class="space-y-3">
+                        <h3 class="text-sm font-semibold text-slate-800">Transports</h3>
+                        <template x-if="connectionTransports.length">
+                            <ul class="space-y-2 text-xs text-slate-600">
+                                <template x-for="item in connectionTransports"
+                                    :key="item.protocol + (item.address || '')">
+                                    <li class="rounded border border-slate-200 bg-slate-50 p-2">
+                                        <div class="flex items-center justify-between text-slate-700">
+                                            <span class="font-semibold"
+                                                x-text="item.label || item.protocol?.toUpperCase()"></span>
+                                            <span
+                                                class="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-500"
+                                                x-text="(item.protocol || '').toUpperCase()"></span>
+                                        </div>
+                                        <div class="mt-1 font-mono text-[11px]" x-text="item.address || '—'"></div>
+                                        <div class="text-[11px] text-slate-500" x-show="item.example_uri"
+                                            x-text="'Example ' + item.example_uri"></div>
+                                        <div class="text-[11px] text-slate-500" x-show="item.path"
+                                            x-text="'Path ' + item.path"></div>
+                                    </li>
+                                </template>
+                            </ul>
+                        </template>
+                        <template x-if="!connectionTransports.length">
+                            <div
+                                class="rounded border border-dashed border-slate-200 p-4 text-center text-xs text-slate-400">
+                                Configure UDP/TCP/WebSocket listeners to expose SIP services.
+                            </div>
+                        </template>
+                    </div>
+                    <div class="space-y-3">
+                        <h3 class="text-sm font-semibold text-slate-800">Sample accounts</h3>
+                        <template x-if="connectionAccounts.length">
+                            <ul class="space-y-2 text-xs text-slate-600">
+                                <template x-for="account in connectionAccounts"
+                                    :key="account.username + (account.realm || '')">
+                                    <li class="rounded border border-slate-200 bg-slate-50 p-2">
+                                        <div class="flex items-center justify-between text-slate-700">
+                                            <span class="font-semibold" x-text="account.username"></span>
+                                            <span
+                                                class="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-500"
+                                                x-text="account.source_label || 'Account'"></span>
+                                        </div>
+                                        <div class="mt-1 font-mono text-[11px]" x-text="account.uri"></div>
+                                        <div class="text-[11px] text-slate-500">
+                                            Password
+                                            <span class="font-mono text-slate-700"
+                                                x-text="account.password || '—'"></span>
+                                        </div>
+                                    </li>
+                                </template>
+                            </ul>
+                        </template>
+                        <template x-if="!connectionAccounts.length">
+                            <div
+                                class="rounded border border-dashed border-slate-200 p-4 text-center text-xs text-slate-400">
+                                Add memory users or extensions to surface ready credentials.
+                            </div>
+                        </template>
+                    </div>
+                </div>
+                <template x-if="connectionNotes.length">
+                    <div class="mt-4 rounded border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
+                        <ul class="list-disc space-y-1 pl-4">
+                            <template x-for="(note, index) in connectionNotes" :key="index">
+                                <li x-text="note"></li>
+                            </template>
+                        </ul>
+                    </div>
+                </template>
+
+                <div class="mt-6 rounded-xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <h3 class="text-sm font-semibold text-slate-900">WebRTC connectivity probe</h3>
+                            <p class="text-xs text-slate-500">Gather ICE candidates to verify browser reachability to
+                                the PBX WebRTC edge.</p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-3 text-[11px]">
+                            <label class="inline-flex items-center gap-1 text-slate-500">
+                                <input type="checkbox" x-model="webrtcTest.useServerIce"
+                                    class="h-3.5 w-3.5 rounded border border-slate-300 text-sky-600 focus:ring-sky-500">
+                                Use /iceservers data
+                            </label>
+                            <button type="button" @click="runWebrtcTest" :disabled="webrtcTest.loading"
+                                class="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-600 transition hover:border-sky-300 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-60">
+                                <template x-if="!webrtcTest.loading">
+                                    <span class="inline-flex items-center gap-1">
+                                        <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                                            stroke-width="1.6">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h14M10 3v14" />
+                                        </svg>
+                                        Run probe
+                                    </span>
+                                </template>
+                                <template x-if="webrtcTest.loading">
+                                    <span class="inline-flex items-center gap-1">
+                                        <svg class="h-3.5 w-3.5 animate-spin" viewBox="0 0 20 20" fill="none"
+                                            stroke="currentColor" stroke-width="1.6">
+                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                d="M4 10a6 6 0 0 1 6-6m0-2a8 8 0 1 0 8 8" />
+                                        </svg>
+                                        Probing…
+                                    </span>
+                                </template>
+                            </button>
+                        </div>
+                    </div>
+                    <template x-if="webrtcTest.error">
+                        <div class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700"
+                            x-text="webrtcTest.error"></div>
+                    </template>
+                    <template x-if="webrtcTest.loading">
+                        <div class="mt-4 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-xs text-sky-700">
+                            Running WebRTC probe…
+                        </div>
+                    </template>
+                    <template x-if="webrtcTest.result && !webrtcTest.loading">
+                        <div class="mt-4 space-y-3 text-xs text-slate-600">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="font-semibold text-slate-700">Ran at:</span>
+                                <span x-text="formatDateTime(webrtcTest.result.timestamp)"></span>
+                                <span
+                                    class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                                    :class="webrtcStatusBadge(webrtcTest.result.status)">
+                                    <span class="h-1.5 w-1.5 rounded-full"
+                                        :class="webrtcStatusDot(webrtcTest.result.status)"></span>
+                                    <span x-text="webrtcStatusLabel(webrtcTest.result.status)"></span>
+                                </span>
+                                <span
+                                    class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500"
+                                    x-text="webrtcTest.result.iceSource === 'server' ? 'Server ICE' : 'Fallback ICE'"></span>
+                            </div>
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                <div>
+                                    <span class="font-semibold text-slate-700">ICE servers used</span>
+                                    <div class="mt-1 space-y-1">
+                                        <template x-for="(server, index) in webrtcTest.result.iceServers"
+                                            :key="server.urls.join(',') + index">
+                                            <div class="rounded border border-slate-200 bg-slate-50 px-2 py-1">
+                                                <div class="font-mono text-[10px]" x-text="server.urls.join(', ')">
+                                                </div>
+                                                <template x-if="server.username">
+                                                    <div class="text-[10px] text-slate-400"
+                                                        x-text="'User ' + server.username"></div>
+                                                </template>
+                                                <template x-if="server.credentialSupplied">
+                                                    <div class="text-[10px] text-slate-400">Credential supplied</div>
+                                                </template>
+                                            </div>
+                                        </template>
+                                        <template x-if="!webrtcTest.result.iceServers.length">
+                                            <div
+                                                class="rounded border border-dashed border-slate-200 px-3 py-2 text-[11px] text-slate-400">
+                                                No ICE servers applied (browser defaults).
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                                <div class="space-y-1">
+                                    <div><span class="font-semibold text-slate-700">Time to first candidate:</span>
+                                        <span x-text="formatMs(webrtcTest.result.timeToFirstCandidateMs)"></span>
+                                    </div>
+                                    <div><span class="font-semibold text-slate-700">ICE gathering complete:</span>
+                                        <span x-text="formatMs(webrtcTest.result.iceGatherDurationMs)"></span>
+                                    </div>
+                                    <div><span class="font-semibold text-slate-700">Candidates discovered:</span>
+                                        <span x-text="webrtcTest.result.candidateTotal"></span>
+                                    </div>
+                                    <div><span class="font-semibold text-slate-700">Candidate types:</span>
+                                        <span x-text="webrtcTest.result.typeSummary"></span>
+                                    </div>
+                                    <div><span class="font-semibold text-slate-700">Addresses seen:</span>
+                                        <span x-text="displayValue(webrtcTest.result.addresses)"></span>
+                                    </div>
+                                </div>
+                            </div>
+                            <template x-if="webrtcTest.result.errorDetail">
+                                <div
+                                    class="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
+                                    <div class="font-semibold text-amber-800">ICE gathering issue</div>
+                                    <div class="mt-1 break-words" x-text="webrtcTest.result.errorDetail"></div>
+                                </div>
+                            </template>
+                            <template x-if="webrtcTest.result.diagnostics">
+                                <div
+                                    class="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
+                                    <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                        Diagnostics
+                                    </div>
+                                    <div class="mt-2 grid gap-2 sm:grid-cols-2">
+                                        <div>ICE gathering state:
+                                            <span class="font-mono text-slate-700"
+                                                x-text="webrtcTest.result.diagnostics.gatherStatus || 'unknown'"></span>
+                                        </div>
+                                        <div>ICE connection state:
+                                            <span class="font-mono text-slate-700"
+                                                x-text="webrtcTest.result.diagnostics.iceConnectionState || 'unknown'"></span>
+                                        </div>
+                                        <div>Peer connection state:
+                                            <span class="font-mono text-slate-700"
+                                                x-text="webrtcTest.result.diagnostics.connectionState || 'unknown'"></span>
+                                        </div>
+                                        <div>Signaling state:
+                                            <span class="font-mono text-slate-700"
+                                                x-text="webrtcTest.result.diagnostics.signalingState || 'unknown'"></span>
+                                        </div>
+                                        <div>Gather elapsed:
+                                            <span class="font-mono text-slate-700"
+                                                x-text="formatMs(webrtcTest.result.diagnostics.gatherElapsedMs)"></span>
+                                        </div>
+                                        <div>First candidate:
+                                            <span class="font-mono text-slate-700"
+                                                x-text="formatMs(webrtcTest.result.diagnostics.firstCandidateMs)"></span>
+                                        </div>
+                                        <div>Local SDP size:
+                                            <span class="font-mono text-slate-700"
+                                                x-text="webrtcTest.result.diagnostics.localDescriptionSize ? webrtcTest.result.diagnostics.localDescriptionSize + ' chars' : '—'"></span>
+                                        </div>
+                                        <div>ICE servers mode:
+                                            <span class="font-mono text-slate-700"
+                                                x-text="webrtcTest.result.diagnostics.usingServerList ? 'Server list' : 'Fallback STUN'"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                            <template x-if="webrtcTest.result.candidates.length">
+                                <div class="space-y-2">
+                                    <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                        Candidate details
+                                    </div>
+                                    <div class="grid gap-2">
+                                        <template x-for="item in webrtcTest.result.candidates" :key="item.id">
+                                            <div class="rounded border border-slate-200 bg-white px-3 py-2">
+                                                <div
+                                                    class="flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-700">
+                                                    <span x-text="(item.type || 'unknown').toUpperCase()"></span>
+                                                    <span x-text="(item.protocol || '').toUpperCase()"></span>
+                                                    <span
+                                                        x-text="item.address ? item.address + ':' + (item.port || '0') : '—'"></span>
+                                                </div>
+                                                <div class="text-[11px] text-slate-500" x-text="item.candidate"></div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                    <template
+                                        x-if="webrtcTest.result.candidateTotal > webrtcTest.result.candidates.length">
+                                        <div class="text-[10px] text-slate-400">
+                                            Showing
+                                            <span x-text="webrtcTest.result.candidates.length"></span>
+                                            of
+                                            <span x-text="webrtcTest.result.candidateTotal"></span>
+                                            candidates.
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </section>
+
+        <section x-show="activeTab === 'routing'" x-cloak x-transition.opacity class="space-y-6">
+            <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h2 class="text-base font-semibold text-slate-900">Routing validation</h2>
+                        <p class="text-xs text-slate-500">Predict how dialled numbers are normalised and which trunk or
+                            route they match.</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" @click="loadSampleRouting" :disabled="!routingChecks.length"
+                            class="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-sky-300 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-60">
+                            Use sample
+                        </button>
+                        <button type="button" @click="routingAdvanced = !routingAdvanced"
+                            class="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-amber-300 hover:text-amber-700">
+                            <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                                stroke-width="1.6">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M10 4v12M4 10h12" />
+                            </svg>
+                            <span x-text="routingAdvanced ? 'Hide advanced' : 'Advanced options'"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <form class="mt-4 grid gap-4 md:grid-cols-2" @submit.prevent="runRoutingCheck">
+                    <label class="flex flex-col gap-2">
+                        <span class="text-xs font-semibold uppercase tracking-wide text-slate-400">Dialled number</span>
+                        <input type="text" x-model.trim="routingInput"
+                            class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                            placeholder="e.g. +14155550123">
+                    </label>
+                    <label class="flex flex-col gap-2">
+                        <span class="text-xs font-semibold uppercase tracking-wide text-slate-400">Caller SIP URI
+                            (optional)</span>
+                        <input type="text" x-model.trim="routingCaller"
+                            class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                            placeholder="sip:caller@rustpbx.com">
+                    </label>
+                    <label class="flex flex-col gap-2">
+                        <span class="text-xs font-semibold uppercase tracking-wide text-slate-400">Direction</span>
+                        <select x-model="routingDirection"
+                            class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200">
+                            <option value="outbound">Outbound</option>
+                            <option value="inbound">Inbound</option>
+                            <option value="internal">Internal</option>
+                        </select>
+                    </label>
+                    <label class="flex flex-col gap-2">
+                        <span class="text-xs font-semibold uppercase tracking-wide text-slate-400">Source IP
+                            (optional)</span>
+                        <input type="text" x-model.trim="routingSourceIp"
+                            class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                            placeholder="203.0.113.10">
+                    </label>
+                    <template x-if="routingAdvanced">
+                        <div class="md:col-span-2 grid gap-3 sm:grid-cols-2" x-transition>
+                            <label class="flex flex-col gap-2">
+                                <span class="text-xs font-semibold uppercase tracking-wide text-slate-400">Request URI
+                                    (optional)</span>
+                                <input type="text" x-model.trim="routingRequestUri"
+                                    class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                    placeholder="sip:destination@rustpbx.com">
+                            </label>
+                            <label class="flex flex-col gap-2">
+                                <span class="text-xs font-semibold uppercase tracking-wide text-slate-400">Source
+                                    trunk</span>
+                                <select x-model="routingSourceTrunk"
+                                    class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200">
+                                    <option value="">Auto detect</option>
+                                    <template x-for="candidate in trunks" :key="candidate.id">
+                                        <option :value="candidate.id" x-text="candidate.label || candidate.id"></option>
+                                    </template>
+                                </select>
+                            </label>
+                        </div>
+                    </template>
+                    <div class="md:col-span-2 flex flex-wrap items-center gap-3">
+                        <button type="submit" :disabled="routingLoading"
+                            class="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60">
+                            <template x-if="!routingLoading">
+                                <span class="inline-flex items-center gap-2">
+                                    <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                                        stroke-width="1.8">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M10 4v12m6-6H4" />
+                                    </svg>
+                                    Evaluate
+                                </span>
+                            </template>
+                            <template x-if="routingLoading">
+                                <span class="inline-flex items-center gap-2">
+                                    <svg class="h-4 w-4 animate-spin" viewBox="0 0 20 20" fill="none"
+                                        stroke="currentColor" stroke-width="1.8">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="M4 10a6 6 0 0 1 6-6m0-2a8 8 0 1 0 8 8" />
+                                    </svg>
+                                    Evaluating…
+                                </span>
+                            </template>
+                        </button>
+                    </div>
+                    <div class="md:col-span-2 space-y-3">
+                        <template x-if="routingLoading">
+                            <div class="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-xs text-sky-700">
+                                Evaluating routing…
+                            </div>
+                        </template>
+                        <template x-if="routingError && !routingLoading">
+                            <div class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700"
+                                x-text="routingError"></div>
+                        </template>
+                        <template x-if="routingResultSummary && !routingLoading">
+                            <div
+                                class="space-y-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-xs text-slate-600">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span class="font-semibold text-slate-700">Rule:</span>
+                                    <span x-text="routingResultSummary.rule || 'None'"></span>
+                                    <span
+                                        class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                                        :class="routingResultSummary.badgeClass">
+                                        <span class="h-1.5 w-1.5 rounded-full"
+                                            :class="routingStatusDot(routingResultSummary.status)"></span>
+                                        <span x-text="routingResultSummary.statusLabel"></span>
+                                    </span>
+                                </div>
+                                <div class="grid gap-1 sm:grid-cols-2">
+                                    <div><span class="font-semibold text-slate-700">Direction:</span>
+                                        <span x-text="(routingResultSummary.direction || '—').toUpperCase()"></span>
+                                    </div>
+                                    <div><span class="font-semibold text-slate-700">Dialled:</span>
+                                        <span x-text="routingResultSummary.input || '—'"></span>
+                                    </div>
+                                    <div><span class="font-semibold text-slate-700">Trunk:</span>
+                                        <span x-text="routingResultSummary.trunk || '—'"></span>
+                                    </div>
+                                    <div><span class="font-semibold text-slate-700">Destination:</span>
+                                        <span x-text="displayValue(routingResultSummary.destination)"></span>
+                                    </div>
+                                    <div><span class="font-semibold text-slate-700">Caller:</span>
+                                        <span x-text="displayValue(routingResultSummary.caller)"></span>
+                                    </div>
+                                    <div><span class="font-semibold text-slate-700">Request URI:</span>
+                                        <span x-text="displayValue(routingResultSummary.requestUri)"></span>
+                                    </div>
+                                    <div><span class="font-semibold text-slate-700">Source IP:</span>
+                                        <span x-text="displayValue(routingResultSummary.sourceIp)"></span>
+                                    </div>
+                                    <template x-if="routingResultSummary.sourceTrunk">
+                                        <div><span class="font-semibold text-slate-700">Provided source trunk:</span>
+                                            <span x-text="routingResultSummary.sourceTrunk"></span>
+                                        </div>
+                                    </template>
+                                    <template x-if="routingResultSummary.detectedTrunk">
+                                        <div><span class="font-semibold text-slate-700">Detected source trunk:</span>
+                                            <span x-text="routingResultSummary.detectedTrunk"></span>
+                                        </div>
+                                    </template>
+                                </div>
+                                <div class="text-[11px] text-slate-500">
+                                    <span class="font-semibold text-slate-700">Outcome:</span>
+                                    <span x-text="routingResultSummary.outcomeLabel"></span>
+                                    <template x-if="routingResultSummary.defaultRoute">
+                                        <span> · used default route</span>
+                                    </template>
+                                </div>
+                                <div class="text-[11px] text-slate-500">
+                                    <span class="font-semibold text-slate-700">Rewrites:</span>
+                                    <span x-text="routingResultSummary.rewritesText"></span>
+                                </div>
+                                <template x-if="routingResultSummary.headers?.length">
+                                    <div class="text-[11px] text-slate-500">
+                                        <span class="font-semibold text-slate-700">Headers:</span>
+                                        <span x-text="formatList(routingResultSummary.headers)"></span>
+                                    </div>
+                                </template>
+                                <template x-if="routingResultSummary.credential">
+                                    <div class="text-[11px] text-slate-500">
+                                        <span class="font-semibold text-slate-700">Credential:</span>
+                                        <span x-text="routingResultSummary.credential.username"></span>
+                                        <template x-if="routingResultSummary.credential.realm">
+                                            <span x-text="'@' + routingResultSummary.credential.realm"></span>
+                                        </template>
+                                    </div>
+                                </template>
+                                <template x-if="routingResultSummary.abort">
+                                    <div class="text-[11px] text-rose-600">
+                                        <span class="font-semibold">Rejected:</span>
+                                        <span x-text="routingResultSummary.abort.code"></span>
+                                        <template x-if="routingResultSummary.abort.reason">
+                                            <span x-text="' · ' + routingResultSummary.abort.reason"></span>
+                                        </template>
+                                    </div>
+                                </template>
+                                <div class="text-[11px] text-slate-400">
+                                    Evaluated <span x-text="formatDateTime(routingResultSummary.createdAt)"></span>
+                                </div>
+                                <template x-if="routingResultSummary.rewritesDiff?.length">
+                                    <div class="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                                        <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                            Field changes
+                                        </div>
+                                        <div class="mt-2 grid gap-2">
+                                            <template x-for="item in routingResultSummary.rewritesDiff"
+                                                :key="item.field + (item.after || '') + (item.before || '')">
+                                                <div class="rounded border border-slate-200 bg-white px-3 py-2">
+                                                    <div class="text-[11px] font-semibold text-slate-700"
+                                                        x-text="item.field">
+                                                    </div>
+                                                    <div class="text-[11px] text-slate-500"><span
+                                                            class="font-semibold">Before:</span>
+                                                        <span x-text="displayValue(item.before)"></span>
+                                                    </div>
+                                                    <div class="text-[11px] text-slate-500"><span
+                                                            class="font-semibold">After:</span>
+                                                        <span x-text="displayValue(item.after)"></span>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+                </form>
+            </div>
+
+            <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+                <h3 class="text-base font-semibold text-slate-900">Recent checks</h3>
+                <div class="mt-4 grid gap-3 md:grid-cols-2">
+                    <template x-for="item in routingChecks" :key="item.id">
+                        <div class="rounded-lg border border-slate-200 bg-white p-3">
+                            <div
+                                class="flex items-center justify-between text-[11px] uppercase tracking-wide text-slate-400">
+                                <span x-text="item.direction"></span>
+                                <span x-text="item.latency_ms + ' ms'"></span>
+                            </div>
+                            <div class="mt-1 text-sm font-semibold text-slate-800" x-text="item.input"></div>
+                            <div class="text-xs text-slate-500">Route → <span class="font-semibold"
+                                    x-text="item.matched_route"></span></div>
+                            <div class="text-xs text-slate-500">Trunk → <span class="font-semibold"
+                                    x-text="item.selected_trunk"></span></div>
+                            <div class="text-xs text-slate-500">Caller → <span class="font-semibold"
+                                    x-text="item.caller || '—'"></span></div>
+                            <div class="text-xs text-slate-500">Source IP → <span class="font-semibold"
+                                    x-text="item.sourceIp || '—'"></span></div>
+                            <div class="mt-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                                :class="item.result === 'ok' ? 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200' : 'bg-amber-50 text-amber-600 ring-1 ring-amber-200'">
+                                <span x-text="item.result === 'ok' ? 'Pass' : 'Warning'"></span>
+                            </div>
+                        </div>
+                    </template>
+                    <template x-if="!routingChecks.length">
+                        <div
+                            class="rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-xs text-slate-400">
+                            No routing checks recorded yet.
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </section>
+
+        <section x-show="activeTab === 'sip'" x-cloak x-transition.opacity class="space-y-6">
+            <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                        <h2 class="text-base font-semibold text-slate-900">Active SIP dialogs</h2>
+                        <p class="text-xs text-slate-500">Inspect INVITE dialogs currently tracked by the SIP
+                            server.</p>
+                    </div>
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                        <div class="flex items-center gap-2">
+                            <input type="text" x-model="dialogCallIdInput" @keydown.enter.prevent="applyDialogFilter"
+                                class="w-48 rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                placeholder="Filter by Call-ID">
+                            <button type="button" @click="applyDialogFilter"
+                                :disabled="dialogsLoading || !(dialogCallIdInput && dialogCallIdInput.trim())"
+                                class="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-semibold text-slate-600 transition hover:border-sky-300 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-60">
+                                Search
+                            </button>
+                            <button type="button" @click="clearDialogFilter"
+                                :disabled="dialogsLoading || (!dialogCallId && !(dialogCallIdInput && dialogCallIdInput.trim()))"
+                                class="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-semibold text-slate-500 transition hover:border-rose-300 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-60">
+                                Clear
+                            </button>
+                        </div>
+                        <button type="button" @click="refreshDialogs" :disabled="dialogsLoading"
+                            class="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-sky-300 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-60">
+                            <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                                stroke-width="1.8">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M4 4v4h4M16 16v-4h-4M5.172 14.828A6 6 0 0 0 15 10M4.998 10a6 6 0 0 1 9.828-4.828" />
+                            </svg>
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mt-4 space-y-3">
+                    <template x-if="dialogsError">
+                        <div class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700"
+                            x-text="dialogsError"></div>
+                    </template>
+
+                    <template x-if="dialogsLoading">
+                        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+                            Loading dialogs…
+                        </div>
+                    </template>
+
+                    <template x-if="!dialogsLoading && !dialogsError && dialogs.length">
+                        <div class="space-y-3">
+                            <div class="text-xs text-slate-500">
+                                <span class="font-semibold text-slate-700" x-text="dialogs.length"></span>
+                                active dialogs
+                                <template x-if="dialogsMeta?.has_more">
+                                    <span> · showing latest 20</span>
+                                </template>
+                                <template x-if="dialogCallId">
+                                    <span> · filtered by <span class="font-mono text-slate-600"
+                                            x-text="dialogCallId"></span></span>
+                                </template>
+                                · refreshed
+                                <span x-text="formatDateTime(dialogsMeta?.generated_at)"></span>
+                            </div>
+                            <div class="grid gap-3">
+                                <template x-for="item in dialogs" :key="item.id">
+                                    <article class="rounded-lg border border-slate-200 bg-white p-4"
+                                        x-data="{ expand: false }">
+                                        <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                            <div class="space-y-1">
+                                                <div
+                                                    class="flex flex-wrap items-center gap-2 text-[11px] font-semibold">
+                                                    <span class="text-sm text-slate-800" x-text="item.call_id"></span>
+                                                    <span class="rounded-full px-2 py-0.5"
+                                                        :class="dialogRolePill(item.role)" x-text="item.role"></span>
+                                                    <span class="rounded-full px-2 py-0.5"
+                                                        :class="dialogStatePill(item.state)" x-text="item.state"></span>
+                                                    <template x-if="item.state_detail">
+                                                        <span class="text-slate-500" x-text="item.state_detail"></span>
+                                                    </template>
+                                                </div>
+                                                <div class="text-xs text-slate-500">
+                                                    <span class="font-semibold text-slate-700">From:</span>
+                                                    <span x-text="item.from_display"></span>
+                                                </div>
+                                                <div class="text-xs text-slate-500">
+                                                    <span class="font-semibold text-slate-700">To:</span>
+                                                    <span x-text="item.to_display"></span>
+                                                </div>
+                                                <template x-if="item.remote_contact">
+                                                    <div class="text-xs text-slate-500">
+                                                        <span class="font-semibold text-slate-700">Remote
+                                                            contact:</span>
+                                                        <span x-text="item.remote_contact"></span>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                            <div class="flex flex-col items-start gap-2 md:items-end">
+                                                <button type="button" @click="expand = !expand"
+                                                    class="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-semibold text-slate-600 transition hover:border-sky-300 hover:text-sky-700">
+                                                    <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none"
+                                                        stroke="currentColor" stroke-width="1.6"
+                                                        :class="expand ? 'rotate-180 transition' : 'transition'">
+                                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                                            d="M6 8l4 4 4-4" />
+                                                    </svg>
+                                                    <span x-text="expand ? 'Hide SDP' : 'Show SDP'"></span>
+                                                </button>
+                                                <div class="text-[11px] text-slate-400">Dialog ID</div>
+                                                <div class="max-w-xs break-all font-mono text-[11px] text-slate-500"
+                                                    x-text="item.id"></div>
+                                            </div>
+                                        </div>
+                                        <div class="mt-3 space-y-2" x-show="expand" x-transition>
+                                            <template x-if="item.offer">
+                                                <div>
+                                                    <div
+                                                        class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                                                        Offer
+                                                    </div>
+                                                    <pre class="mt-1 max-h-48 overflow-auto rounded-lg bg-slate-900/90 p-3 text-[11px] leading-tight text-slate-100"
+                                                        x-text="item.offer"></pre>
+                                                </div>
+                                            </template>
+                                            <template x-if="item.answer">
+                                                <div>
+                                                    <div
+                                                        class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                                                        Answer
+                                                    </div>
+                                                    <pre class="mt-1 max-h-48 overflow-auto rounded-lg bg-slate-900/90 p-3 text-[11px] leading-tight text-slate-100"
+                                                        x-text="item.answer"></pre>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </article>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+
+                    <template x-if="!dialogsLoading && !dialogsError && !dialogs.length">
+                        <div class="rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-400"
+                            x-text="dialogCallId ? 'No dialogs match this Call-ID filter.' : 'No active dialogs reported.'">
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+                <div class="space-y-1">
+                    <h2 class="text-base font-semibold text-slate-900">Locator registry</h2>
+                    <p class="text-xs text-slate-500">Lookup registration bindings or clear stale records.</p>
+                </div>
+                <form class="mt-4 grid gap-4 md:grid-cols-2" @submit.prevent="performLocatorLookup()">
+                    <label class="flex flex-col gap-2">
+                        <span class="text-xs font-semibold uppercase tracking-wide text-slate-400">User</span>
+                        <input type="text" x-model.trim="locatorUser"
+                            class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                            placeholder="e.g. 1001 or 1001@rustpbx.com">
+                    </label>
+                    <label class="flex flex-col gap-2">
+                        <span class="text-xs font-semibold uppercase tracking-wide text-slate-400">SIP URI</span>
+                        <input type="text" x-model.trim="locatorUri"
+                            class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                            placeholder="sip:1001@rustpbx.com">
+                    </label>
+                    <div class="md:col-span-2 flex flex-wrap items-center gap-3">
+                        <button type="submit"
+                            class="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                            :disabled="locatorLoading || locatorClearing || !hasLocatorInput">
+                            <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                                stroke-width="1.8">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="m13 13 4 4m-2-7A5 5 0 1 1 4 7a5 5 0 0 1 11 0Z" />
+                            </svg>
+                            Lookup registration
+                        </button>
+                        <button type="button" @click="clearLocator"
+                            class="inline-flex items-center gap-2 rounded-lg border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-600 transition hover:border-rose-300 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            :disabled="locatorClearing || !hasLocatorInput">
+                            <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                                stroke-width="1.8">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M6 6h8m-7 0v8m6-8v8M4 6h12M5 6l1-2h8l1 2m-2 0v9a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V6" />
+                            </svg>
+                            Clear registration
+                        </button>
+                        <button type="button" @click="resetLocator"
+                            class="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-700"
+                            :disabled="locatorLoading || locatorClearing">
+                            <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                                stroke-width="1.8">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M4.5 9.5a5.5 5.5 0 1 1 1.742 4.007M4.5 9.5H2m0 0V6" />
+                            </svg>
+                            Reset
+                        </button>
+                    </div>
+                </form>
+
+                <div class="mt-4 space-y-3">
+                    <template x-if="locatorError">
+                        <div class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700"
+                            x-text="locatorError"></div>
+                    </template>
+                    <template x-if="locatorClearFeedback">
+                        <div class="rounded-lg px-4 py-3 text-xs font-semibold"
+                            :class="locatorClearFeedback?.variant === 'success' ? 'border border-emerald-200 bg-emerald-50 text-emerald-700' : 'border border-amber-200 bg-amber-50 text-amber-700'"
+                            x-text="locatorClearFeedback?.message"></div>
+                    </template>
+                    <template x-if="locatorLoading">
+                        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+                            Loading locator records…
+                        </div>
+                    </template>
+                    <template x-if="locatorResult">
+                        <div class="space-y-3">
+                            <div
+                                class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+                                <div class="flex flex-wrap items-center gap-3">
+                                    <div>
+                                        <span class="font-semibold text-slate-700">Bindings:</span>
+                                        <span x-text="locatorResult.total"></span>
+                                    </div>
+                                    <div>
+                                        <span class="font-semibold text-slate-700">Generated:</span>
+                                        <span x-text="formatDateTime(locatorResult.generated_at)"></span>
+                                    </div>
+                                    <div>
+                                        <span class="font-semibold text-slate-700">Query:</span>
+                                        <span x-text="locatorResult.query.uri"></span>
+                                    </div>
+                                </div>
+                            </div>
+                            <template x-if="locatorResult.records.length">
+                                <div class="space-y-3">
+                                    <template x-for="record in locatorResult.records" :key="record.binding_key">
+                                        <article class="rounded-lg border border-slate-200 bg-white p-4">
+                                            <div
+                                                class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                                <div class="space-y-1">
+                                                    <div class="font-semibold text-slate-800"
+                                                        x-text="record.binding_key"></div>
+                                                    <div class="text-xs text-slate-500">
+                                                        <span class="font-semibold text-slate-700">AoR:</span>
+                                                        <span x-text="record.aor"></span>
+                                                    </div>
+                                                    <template x-if="record.destination">
+                                                        <div class="text-xs text-slate-500">
+                                                            <span
+                                                                class="font-semibold text-slate-700">Destination:</span>
+                                                            <span x-text="record.destination"></span>
+                                                        </div>
+                                                    </template>
+                                                    <template x-if="record.contact">
+                                                        <div class="text-xs text-slate-500">
+                                                            <span class="font-semibold text-slate-700">Contact:</span>
+                                                            <span x-text="record.contact"></span>
+                                                        </div>
+                                                    </template>
+                                                    <template x-if="record.user_agent">
+                                                        <div class="text-xs text-slate-500">
+                                                            <span class="font-semibold text-slate-700">User
+                                                                agent:</span>
+                                                            <span x-text="record.user_agent"></span>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                                <div class="flex flex-col items-start gap-1 md:items-end">
+                                                    <div class="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                                                        :class="record.supports_webrtc ? 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200' : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200'">
+                                                        <span
+                                                            x-text="record.supports_webrtc ? 'WebRTC capable' : 'SIP only'"></span>
+                                                    </div>
+                                                    <div class="text-[11px] text-slate-400">
+                                                        Expires in <span x-text="record.expires"></span> s
+                                                    </div>
+                                                    <template
+                                                        x-if="record.age_seconds !== null && record.age_seconds !== undefined">
+                                                        <div class="text-[11px] text-slate-400">
+                                                            Age <span
+                                                                x-text="formatDuration(record.age_seconds)"></span>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                            <div class="mt-3 grid gap-2 text-xs text-slate-500 md:grid-cols-2">
+                                                <template x-if="record.transport">
+                                                    <div>
+                                                        <span class="font-semibold text-slate-700">Transport:</span>
+                                                        <span x-text="record.transport"></span>
+                                                    </div>
+                                                </template>
+                                                <template x-if="record.instance_id">
+                                                    <div>
+                                                        <span class="font-semibold text-slate-700">Instance ID:</span>
+                                                        <span x-text="record.instance_id"></span>
+                                                    </div>
+                                                </template>
+                                                <template x-if="record.gruu">
+                                                    <div>
+                                                        <span class="font-semibold text-slate-700">GRUU:</span>
+                                                        <span x-text="record.gruu"></span>
+                                                    </div>
+                                                </template>
+                                                <template x-if="record.temp_gruu">
+                                                    <div>
+                                                        <span class="font-semibold text-slate-700">Temp GRUU:</span>
+                                                        <span x-text="record.temp_gruu"></span>
+                                                    </div>
+                                                </template>
+                                                <template x-if="record.registered_aor">
+                                                    <div>
+                                                        <span class="font-semibold text-slate-700">Registered
+                                                            AoR:</span>
+                                                        <span x-text="record.registered_aor"></span>
+                                                    </div>
+                                                </template>
+                                                <template x-if="record.path.length">
+                                                    <div class="md:col-span-2">
+                                                        <span class="font-semibold text-slate-700">Path:</span>
+                                                        <span x-text="record.path.join(' → ')"></span>
+                                                    </div>
+                                                </template>
+                                                <template x-if="record.service_route.length">
+                                                    <div class="md:col-span-2">
+                                                        <span class="font-semibold text-slate-700">Service
+                                                            route:</span>
+                                                        <span x-text="record.service_route.join(' → ')"></span>
+                                                    </div>
+                                                </template>
+                                                <template x-if="record.contact_params">
+                                                    <div class="md:col-span-2">
+                                                        <span class="font-semibold text-slate-700">Contact
+                                                            params:</span>
+                                                        <span
+                                                            x-text="formatContactParams(record.contact_params)"></span>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </article>
+                                    </template>
+                                </div>
+                            </template>
+                            <template x-if="!locatorResult.records.length">
+                                <div
+                                    class="rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-400">
+                                    No registration bindings found.
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </section>
+
+        <section x-show="activeTab === 'dialer'" x-cloak x-transition.opacity class="space-y-6">
+            <div class="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+                <div class="space-y-6">
+                    <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+                        <div class="space-y-1">
+                            <h2 class="text-base font-semibold text-slate-900">Web Dialer (JsSIP)</h2>
+                            <p class="text-xs text-slate-500">Use the embedded JsSIP client to register over WebSocket
+                                and place quick diagnostic calls.</p>
+                        </div>
+                        <div class="mt-4 space-y-4">
+                            <div>
+                                <template x-for="plugin in activePlugins" :key="plugin.id">
+                                    <div x-html="plugin.ui_top" class="mb-4"></div>
+                                </template>
+                            </div>
+                            <div class="grid gap-4 md:grid-cols-2" x-show="callMode === 'standard'">
+                                <label class="flex flex-col gap-1.5">
+                                    <span class="text-xs font-semibold uppercase tracking-wide text-slate-400">WebSocket
+                                        SIP URL</span>
+                                    <input type="text" x-model.trim="sipForm.wsServer"
+                                        class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                        placeholder="wss://pbx.rustpbx.com/ws">
+                                    <span class="text-[11px] text-slate-400">Prefer secure wss:// transports.</span>
+                                </label>
+                                <label class="flex flex-col gap-1.5">
+                                    <span class="text-xs font-semibold uppercase tracking-wide text-slate-400">SIP
+                                        URI</span>
+                                    <input type="text" x-model.trim="sipForm.uri"
+                                        class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                        placeholder="sip:1001@rustpbx.com">
+                                </label>
+                                <label class="flex flex-col gap-1.5">
+                                    <span class="text-xs font-semibold uppercase tracking-wide text-slate-400">Auth User
+                                        (optional)</span>
+                                    <input type="text" x-model.trim="sipForm.authUser"
+                                        class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                        placeholder="">
+                                </label>
+                                <label class="flex flex-col gap-1.5">
+                                    <span
+                                        class="text-xs font-semibold uppercase tracking-wide text-slate-400">Password</span>
+                                    <input type="password" x-model="sipForm.password"
+                                        class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                        placeholder="••••••">
+                                </label>
+                            </div>
+                            <div>
+                                <template x-for="plugin in activePlugins" :key="plugin.id">
+                                    <div x-html="plugin.ui_form" x-show="callMode === plugin.mode" class="mb-4"></div>
+                                </template>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-3" x-show="callMode === 'standard'">
+                                <button type="button" @click="registerSip" :disabled="sipRegistering"
+                                    class="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60">
+                                    <template x-if="!sipRegistering">
+                                        <span class="inline-flex items-center gap-2">
+                                            <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                                                stroke-width="1.6">
+                                                <path stroke-linecap="round" stroke-linejoin="round"
+                                                    d="M4 8h12m-6-4v12" />
+                                            </svg>
+                                            Register
+                                        </span>
+                                    </template>
+                                    <template x-if="sipRegistering">
+                                        <span class="inline-flex items-center gap-2">
+                                            <svg class="h-4 w-4 animate-spin" viewBox="0 0 20 20" fill="none"
+                                                stroke="currentColor" stroke-width="1.6">
+                                                <path stroke-linecap="round" stroke-linejoin="round"
+                                                    d="M4 10a6 6 0 0 1 6-6m0-2a8 8 0 1 0 8 8" />
+                                            </svg>
+                                            Registering...
+                                        </span>
+                                    </template>
+                                </button>
+                                <button type="button" @click="unregisterSip" :disabled="!hasSipUa"
+                                    class="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-rose-300 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-60">
+                                    Unregister
+                                </button>
+                                <span
+                                    class="inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold"
+                                    :class="sipStatusPill(sipStatusVariant)">
+                                    <span class="h-1.5 w-1.5 rounded-full"
+                                        :class="sipStatusDot(sipStatusVariant)"></span>
+                                    <span x-text="sipStatusText"></span>
+                                </span>
+                            </div>
+                            <template x-if="sipRegisterError">
+                                <div class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700"
+                                    x-text="sipRegisterError"></div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+                        <div class="space-y-1">
+                            <h3 class="text-sm font-semibold text-slate-900">Call Controls</h3>
+                            <p class="text-xs text-slate-500">Enter a destination number or URI, then place a live
+                                INVITE directly from the browser.</p>
+                        </div>
+                        <div class="mt-4 space-y-4">
+                            <label class="flex flex-col gap-2">
+                                <span
+                                    class="text-xs font-semibold uppercase tracking-wide text-slate-400">Destination</span>
+                                <div class="flex gap-2">
+                                    <input type="text" x-model.trim="sipForm.target"
+                                        class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                        placeholder="1000 or sip:1000@rustpbx.com">
+                                    <div class="relative" x-data="{ open: false }" @click.outside="open = false">
+                                        <button type="button" @click="open = !open"
+                                            class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-sky-300 hover:text-sky-700">
+                                            <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                                                stroke-width="1.8">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 8l4 4 4-4" />
+                                            </svg>
+                                        </button>
+                                        <div x-cloak x-show="open" x-transition.origin.top.right
+                                            class="absolute right-0 z-20 mt-2 w-80 rounded-lg border border-slate-200 bg-white p-2 text-sm shadow-xl">
+                                            <template x-if="sipRecentTargets.length">
+                                                <div
+                                                    class="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                                                    Recent
+                                                </div>
+                                            </template>
+                                            <template x-for="recent in sipRecentTargets" :key="recent.value">
+                                                <button type="button"
+                                                    @click="sipForm.target = recent.value; open = false"
+                                                    class="flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition hover:bg-slate-100">
+                                                    <span class="truncate text-xs font-semibold text-slate-600"
+                                                        x-text="recent.label || recent.value"></span>
+                                                    <template x-if="recent.label && recent.label !== recent.value">
+                                                        <span class="truncate font-mono text-xs text-slate-500"
+                                                            x-text="recent.value"></span>
+                                                    </template>
+                                                </button>
+                                            </template>
+                                            <template
+                                                x-if="sipRecentTargets.length && dialer.destination_samples?.length">
+                                                <div class="my-1 border-t border-slate-100"></div>
+                                            </template>
+                                            <template x-if="dialer.destination_samples?.length">
+                                                <div
+                                                    class="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                                                    Presets
+                                                </div>
+                                            </template>
+                                            <template x-for="sample in dialer.destination_samples" :key="sample.value">
+                                                <button type="button"
+                                                    @click="sipForm.target = sample.value; open = false"
+                                                    class="flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition hover:bg-slate-100">
+                                                    <span class="truncate text-xs font-semibold text-slate-600"
+                                                        x-text="sample.label"></span>
+                                                    <span class="truncate font-mono text-xs text-slate-500"
+                                                        x-text="sample.value"></span>
+                                                </button>
+                                            </template>
+                                            <template
+                                                x-if="!sipRecentTargets.length && !dialer.destination_samples?.length">
+                                                <div
+                                                    class="rounded border border-dashed border-slate-200 px-2 py-3 text-center text-[11px] text-slate-400">
+                                                    No entries yet
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </div>
+                            </label>
+                            <div class="flex flex-wrap items-center gap-3">
+                                <button type="button" @click="placeSipCall" :disabled="!canPlaceCall"
+                                    class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60">
+                                    <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                                        stroke-width="1.6">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="M2 5l4-2 3 6-3 1c1.5 3 4 5.5 7 7l1-3 6 3-2 4c-6-2-11-6.5-16-16Z" />
+                                    </svg>
+                                    Call
+                                </button>
+                                <button type="button" @click="hangupSipCall" :disabled="!hasSipSession"
+                                    class="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-rose-300 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-60">
+                                    Hang up
+                                </button>
+                            </div>
+                            <template x-if="sipIncoming">
+                                <div
+                                    class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
+                                    <div class="font-semibold text-amber-800">Incoming call from <span
+                                            x-text="sipIncoming.displayName"></span></div>
+                                    <div class="text-[11px] text-amber-600" x-text="sipIncoming.uri"></div>
+                                    <div class="mt-2 flex flex-wrap gap-2">
+                                        <button type="button" @click="answerIncomingCall"
+                                            class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-emerald-500">
+                                            Answer
+                                        </button>
+                                        <button type="button" @click="rejectIncomingCall"
+                                            class="inline-flex items-center gap-2 rounded-lg border border-rose-300 px-3 py-1.5 text-[11px] font-semibold text-rose-600 transition hover:bg-rose-50">
+                                            Reject
+                                        </button>
+                                    </div>
+                                </div>
+                            </template>
+                            <div class="text-xs text-slate-500">
+                                <span class="font-semibold text-slate-700">Call status:</span>
+                                <span x-text="sipCallStatus"></span>
+                            </div>
+                            <template x-if="sipCallError">
+                                <div class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700"
+                                    x-text="sipCallError"></div>
+                            </template>
+                            <audio x-ref="sipRemoteAudio" autoplay playsinline hidden></audio>
+                            <audio x-ref="sipLocalAudio" autoplay playsinline hidden muted></audio>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-6">
+                    <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+                        <div class="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <h3 class="text-sm font-semibold text-slate-900">SIP Requests / Responses</h3>
+                                <p class="text-xs text-slate-500">Latest 80 WebSocket messages captured from JsSIP.</p>
+                            </div>
+                            <div class="flex items-center gap-3 text-[11px]">
+                                <label class="inline-flex items-center gap-1 text-slate-500">
+                                    <input type="checkbox" x-model="sipTrafficAutoScroll"
+                                        class="h-3.5 w-3.5 rounded border border-slate-300 text-sky-600 focus:ring-sky-500">
+                                    Auto scroll
+                                </label>
+                                <button type="button" @click="clearSipTraffic" :disabled="!sipTraffic.length"
+                                    class="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-60">
+                                    Clear
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mt-4 max-h-[32rem] overflow-y-auto" x-ref="sipTrafficContainer">
+                            <template x-if="!sipTraffic.length">
+                                <div
+                                    class="rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-xs text-slate-400">
+                                    Waiting for SIP traffic...
+                                </div>
+                            </template>
+                            <div class="space-y-2">
+                                <template x-for="item in sipTraffic" :key="item.id">
+                                    <article class="rounded-lg border border-slate-200 bg-slate-50"
+                                        x-data="{ open: false }">
+                                        <button type="button" @click="open = !open"
+                                            class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-slate-600 transition hover:bg-slate-100">
+                                            <div class="space-y-1">
+                                                <div class="flex items-center gap-2">
+                                                    <div class="font-mono text-[11px] text-slate-400"
+                                                        x-text="item.time"></div>
+                                                    <span
+                                                        class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                                                        :class="item.direction === 'outgoing'
+                                                            ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200'
+                                                            : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'"
+                                                        x-text="item.direction === 'outgoing' ? 'Request' : 'Response'"></span>
+                                                </div>
+                                                <div class="text-xs font-semibold text-slate-700" x-text="item.summary">
+                                                </div>
+                                            </div>
+                                            <svg class="h-4 w-4 text-slate-400 transition"
+                                                :class="open ? 'rotate-180' : ''" viewBox="0 0 20 20" fill="none"
+                                                stroke="currentColor" stroke-width="1.6">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 8l4 4 4-4" />
+                                            </svg>
+                                        </button>
+                                        <pre x-show="open" x-transition
+                                            class="max-h-64 overflow-auto rounded-b bg-slate-900/90 p-3 text-[11px] leading-tight text-slate-100"
+                                            x-text="item.payload"></pre>
+                                    </article>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <h3 class="text-sm font-semibold text-slate-900">Registration & call events</h3>
+                                <p class="text-xs text-slate-500">Newest entries appear first to simplify
+                                    troubleshooting.</p>
+                            </div>
+                            <button type="button" @click="clearSipEvents" :disabled="!sipEvents.length"
+                                class="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-60">
+                                Clear
+                            </button>
+                        </div>
+                        <div class="mt-4 space-y-2 max-h-80 overflow-y-auto">
+                            <template x-if="!sipEvents.length">
+                                <div
+                                    class="rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-xs text-slate-400">
+                                    No events yet.
+                                </div>
+                            </template>
+                            <template x-for="event in sipEvents" :key="event.id">
+                                <div class="flex gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                                    <div class="font-mono text-[11px] text-slate-400" x-text="event.time"></div>
+                                    <div class="flex-1 space-y-1">
+                                        <span
+                                            class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                                            :class="sipEventPill(event.level)">
+                                            <span class="h-1.5 w-1.5 rounded-full"
+                                                :class="sipStatusDot(event.level)"></span>
+                                            <span x-text="event.levelLabel"></span>
+                                        </span>
+                                        <p class="text-xs text-slate-600" x-text="event.message"></p>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </div>
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('testingConsole', (payload) => {
+                let sipUa = null;
+                let sipSession = null;
+                const RECENT_TARGETS_KEY = 'rustpbx.console.sipRecentTargets';
+                const FALLBACK_ICE_SERVERS = [{ urls: ['stun:stun.l.google.com:19302'] }];
+                return {
+                    init() {
+                        const data = typeof payload === 'string' ? JSON.parse(payload || '{}') : (payload || {});
+                        this.lastAudit = data.last_audit || null;
+                        this.trunks = Array.isArray(data.trunks) ? data.trunks : [];
+                        this.routingChecks = Array.isArray(data.routing_checks) ? data.routing_checks : [];
+                        this.connection = data.connection || {};
+                        this.connectionTransports = Array.isArray(this.connection.transports)
+                            ? this.connection.transports
+                            : [];
+                        this.connectionAccounts = Array.isArray(this.connection.accounts)
+                            ? this.connection.accounts
+                            : [];
+                        this.connectionNotes = Array.isArray(this.connection.notes) ? this.connection.notes : [];
+                        this.dialer = data.dialer || { source_options: [], destination_samples: [] };
+                        this.initializeSipDefaults();
+                        this.loadRecentTargets({ overwrite: true });
+                        this.ensureIceServers();
+                        const firstCheck = this.routingChecks?.[0] || {};
+                        this.routingInput = firstCheck.input || '';
+                        this.routingDirection = firstCheck.direction || 'outbound';
+                        this.routingCaller = firstCheck.caller && firstCheck.caller !== '—' ? firstCheck.caller : '';
+                        this.routingRequestUri = '';
+                        this.routingSourceTrunk = '';
+                        this.routingSourceIp = firstCheck.sourceIp && firstCheck.sourceIp !== '—' ? firstCheck.sourceIp : '';
+                        this.routingResultSummary = null;
+                        this.routingError = null;
+                        this.basePath = "{{ base_path | default('/console')|safe }}"
+                        this.$watch('activeTab', (value) => {
+                            if (value === 'sip') {
+                                this.ensureDialogsLoaded();
+                            }
+                        });
+                        this.$watch(() => this.connectionTransports, () => {
+                            this.initializeSipDefaults();
+                        });
+                        this.$watch(() => this.connectionAccounts, () => {
+                            this.initializeSipDefaults();
+                        });
+                        this.$watch(() => this.sipForm.uri, (value) => {
+                            this.updateSipDomain(value);
+                        });
+
+                        if (window.RustPBX && window.RustPBX.plugins) {
+                            this.activePlugins = window.RustPBX.plugins.map(p => {
+                                if (typeof p.init === 'function') {
+                                    p.init(this);
+                                }
+                                return p;
+                            });
+                        }
+                    },
+                    callMode: 'standard',
+                    activePlugins: [],
+                    basePath: '',
+                    lastAudit: null,
+                    trunks: [],
+                    routingChecks: [],
+                    connection: {},
+                    connectionTransports: [],
+                    connectionAccounts: [],
+                    connectionNotes: [],
+                    webrtcTest: { useServerIce: true, loading: false, error: null, result: null },
+                    routingInput: '',
+                    routingDirection: 'outbound',
+                    routingAdvanced: false,
+                    routingCaller: '',
+                    routingRequestUri: '',
+                    routingSourceTrunk: '',
+                    routingSourceIp: '',
+                    routingLoading: false,
+                    routingError: null,
+                    routingResultSummary: null,
+                    dialogCallIdInput: '',
+                    dialogCallId: '',
+                    dialer: {},
+                    sipForm: { wsServer: '', uri: '', authUser: '', password: '', displayName: '', target: '' },
+                    sipUaReady: false,
+                    get hasSipUa() {
+                        return Boolean(this.sipUaReady);
+                    },
+                    sipRegistering: false,
+                    sipRegistered: false,
+                    sipStatusText: 'Unregistered',
+                    sipStatusVariant: 'idle',
+                    sipRegisterError: null,
+                    sipCallStatus: 'Idle',
+                    sipCallError: null,
+                    sipCallDirection: null,
+                    sipIncoming: null,
+                    sipEvents: [],
+                    sipTraffic: [],
+                    sipRecentTargets: [],
+                    sipIceServers: [],
+                    sipIceServersError: null,
+                    sipIceServersFetched: false,
+                    sipIceServersPromise: null,
+                    sipIceServersLoading: false,
+                    sipTrafficAutoScroll: true,
+                    sipTrafficLimit: 80,
+                    sipLocalStream: null,
+                    sipRemoteStream: null,
+                    sipDomain: '',
+                    sipDebugEnabled: false,
+                    hasSipSession: false,
+                    tabs: [
+                        { id: 'dialer', label: 'Web Dialer' },
+                        { id: 'connection', label: 'Connection' },
+                        { id: 'routing', label: 'Routing' },
+                        { id: 'sip', label: 'SIP State' },
+                    ],
+                    activeTab: 'dialer',
+                    selectTab(id) {
+                        this.activeTab = id;
+                        if (id === 'sip') {
+                            this.ensureDialogsLoaded();
+                        }
+                    },
+                    get hasDialogFilter() {
+                        return Boolean(this.dialogCallId);
+                    },
+                    get hasLocatorInput() {
+                        return Boolean(
+                            (this.locatorUser && this.locatorUser.trim()) || (this.locatorUri && this.locatorUri.trim())
+                        );
+                    },
+                    get canPlaceCall() {
+                        if (this.callMode !== 'standard') {
+                            return !sipSession;
+                        }
+                        return Boolean(this.sipRegistered && !sipSession && !this.sipRegistering);
+                    },
+                    dialogs: [],
+                    dialogsMeta: null,
+                    dialogsLoading: false,
+                    dialogsError: null,
+                    dialogsFetchedAt: null,
+                    locatorUser: '',
+                    locatorUri: '',
+                    locatorLoading: false,
+                    locatorClearing: false,
+                    locatorError: null,
+                    locatorResult: null,
+                    locatorClearFeedback: null,
+                    statusLabel(value) {
+                        switch ((value || '').toLowerCase()) {
+                            case 'healthy':
+                                return 'Healthy';
+                            case 'warning':
+                                return 'Warning';
+                            case 'lab':
+                                return 'Lab';
+                            default:
+                                return value || 'Unknown';
+                        }
+                    },
+                    statusPill(value) {
+                        const key = (value || '').toLowerCase();
+                        if (key === 'healthy') {
+                            return 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200';
+                        }
+                        if (key === 'warning') {
+                            return 'bg-amber-50 text-amber-600 ring-1 ring-amber-200';
+                        }
+                        if (key === 'lab') {
+                            return 'bg-sky-50 text-sky-600 ring-1 ring-sky-200';
+                        }
+                        return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200';
+                    },
+                    statusDot(value) {
+                        switch ((value || '').toLowerCase()) {
+                            case 'healthy':
+                                return 'bg-emerald-500';
+                            case 'warning':
+                                return 'bg-amber-500';
+                            case 'lab':
+                                return 'bg-sky-500';
+                            default:
+                                return 'bg-slate-400';
+                        }
+                    },
+                    loadSampleRouting() {
+                        if (!this.routingChecks.length) {
+                            return;
+                        }
+                        const sample = this.routingChecks[0];
+                        this.routingInput = sample.input;
+                        this.routingDirection = sample.direction;
+                        this.routingCaller = sample.caller && sample.caller !== '—' ? sample.caller : '';
+                        this.routingRequestUri = '';
+                        this.routingSourceTrunk = '';
+                        this.routingSourceIp = sample.sourceIp && sample.sourceIp !== '—' ? sample.sourceIp : '';
+                        this.routingAdvanced = false;
+                        this.routingResultSummary = null;
+                        this.routingError = null;
+                    },
+                    async runRoutingCheck() {
+                        const callee = (this.routingInput || '').trim();
+                        if (!callee) {
+                            this.routingError = 'Provide a dialled number to continue.';
+                            return;
+                        }
+                        const payload = {
+                            callee,
+                            direction: this.routingDirection,
+                        };
+                        const caller = (this.routingCaller || '').trim();
+                        if (caller) {
+                            payload.caller = caller;
+                        }
+                        const sourceIp = (this.routingSourceIp || '').trim();
+                        if (sourceIp) {
+                            payload.source_ip = sourceIp;
+                        }
+                        if (this.routingRequestUri && this.routingRequestUri.trim()) {
+                            payload.request_uri = this.routingRequestUri.trim();
+                        }
+                        if (this.routingSourceTrunk) {
+                            payload.source_trunk = this.routingSourceTrunk;
+                        }
+                        this.routingLoading = true;
+                        this.routingError = null;
+                        this.routingResultSummary = null;
+                        const started = typeof performance !== 'undefined' ? performance.now() : Date.now();
+                        try {
+                            const response = await fetch(this.buildUrl('/diagnostics/routes/evaluate'), {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                credentials: 'same-origin',
+                                body: JSON.stringify(payload),
+                            });
+                            const data = await response.json().catch(() => null);
+                            if (!response.ok) {
+                                const message = data?.message || `Routing evaluation failed (${response.status})`;
+                                throw new Error(message);
+                            }
+                            const summary = this.transformRoutingResult(data, callee);
+                            this.routingResultSummary = summary;
+                            const ended = typeof performance !== 'undefined' ? performance.now() : Date.now();
+                            const latencyMs = Math.max(1, Math.round(ended - started));
+                            this.updateRoutingChecks(summary, latencyMs);
+                        } catch (err) {
+                            this.routingError = err?.message || 'Routing evaluation failed.';
+                        } finally {
+                            this.routingLoading = false;
+                        }
+                    },
+                    initializeSipDefaults() {
+                        const transports = Array.isArray(this.connectionTransports) ? this.connectionTransports : [];
+                        if (!this.sipForm.wsServer) {
+                            const wsTransport = transports.find((item) => {
+                                const key = (item?.protocol || '').toLowerCase();
+                                return key.includes('ws');
+                            });
+                            if (wsTransport) {
+                                this.sipForm.wsServer = wsTransport.example_uri || wsTransport.address || '';
+                            } else if (typeof window !== 'undefined' && window.location) {
+                                const origin = window.location.origin || '';
+                                if (origin) {
+                                    const base = origin.replace(/^http/i, 'ws');
+                                    this.sipForm.wsServer = `${base.replace(/\/$/, '')}/ws`;
+                                }
+                            }
+                        }
+                        const accounts = Array.isArray(this.connectionAccounts) ? this.connectionAccounts : [];
+                        const primaryAccount = accounts[0] || null;
+                        if (primaryAccount) {
+                            if (!this.sipForm.uri && primaryAccount.uri) {
+                                this.sipForm.uri = primaryAccount.uri;
+                            }
+                            if (!this.sipForm.password && primaryAccount.password) {
+                                this.sipForm.password = primaryAccount.password;
+                            }
+                            if (!this.sipForm.displayName && primaryAccount.username) {
+                                this.sipForm.displayName = primaryAccount.username;
+                            }
+                        }
+                        if (!this.sipForm.target) {
+                            const sample = this.dialer?.destination_samples?.[0];
+                            if (sample?.value) {
+                                this.sipForm.target = sample.value;
+                            }
+                        }
+                        if (!this.sipDomain) {
+                            this.updateSipDomain(this.sipForm.uri);
+                        }
+                    },
+                    updateSipDomain(value) {
+                        const parsed = this.parseSipUri(value);
+                        this.sipDomain = parsed?.domain || '';
+                    },
+                    parseSipUri(input) {
+                        if (!input) {
+                            return null;
+                        }
+                        const trimmed = String(input).trim();
+                        if (!trimmed) {
+                            return null;
+                        }
+                        const sipMatch = trimmed.match(/^sip:([^@]+)@([^;>]+)$/i);
+                        if (sipMatch) {
+                            return { user: sipMatch[1], domain: sipMatch[2], uri: trimmed };
+                        }
+                        const simpleMatch = trimmed.match(/^([^@]+)@([^@:\s]+)$/);
+                        if (simpleMatch) {
+                            return { user: simpleMatch[1], domain: simpleMatch[2], uri: `sip:${simpleMatch[1]}@${simpleMatch[2]}` };
+                        }
+                        return null;
+                    },
+                    loadRecentTargets(options = {}) {
+                        const overwrite = Boolean(options?.overwrite);
+                        if (typeof window === 'undefined') {
+                            this.sipRecentTargets = [];
+                            return;
+                        }
+                        let entries = [];
+                        try {
+                            const raw = window.localStorage?.getItem(RECENT_TARGETS_KEY);
+                            if (raw) {
+                                const parsed = JSON.parse(raw);
+                                if (Array.isArray(parsed)) {
+                                    entries = parsed
+                                        .map((item) => {
+                                            if (!item) {
+                                                return null;
+                                            }
+                                            if (typeof item === 'string') {
+                                                const value = item.trim();
+                                                return value ? { value, label: value } : null;
+                                            }
+                                            if (typeof item === 'object' && item.value) {
+                                                const value = String(item.value).trim();
+                                                if (!value) {
+                                                    return null;
+                                                }
+                                                const label = item.label ? String(item.label).trim() : value;
+                                                return { value, label };
+                                            }
+                                            return null;
+                                        })
+                                        .filter(Boolean)
+                                        .slice(0, 5);
+                                }
+                            }
+                        } catch (err) {
+                            entries = [];
+                        }
+                        this.sipRecentTargets = entries;
+                        const first = this.sipRecentTargets[0];
+                        if (first && (overwrite || !this.sipForm.target)) {
+                            this.sipForm.target = first.value;
+                        }
+                    },
+                    persistRecentTargets() {
+                        if (typeof window === 'undefined' || !window.localStorage) {
+                            return;
+                        }
+                        try {
+                            window.localStorage.setItem(RECENT_TARGETS_KEY, JSON.stringify(this.sipRecentTargets));
+                        } catch (err) {
+                            // ignore persistence errors
+                        }
+                    },
+                    rememberRecentTarget(rawInput, resolvedValue) {
+                        const raw = rawInput ? String(rawInput).trim() : '';
+                        const resolved = resolvedValue ? String(resolvedValue).trim() : '';
+                        const value = resolved || raw;
+                        if (!value) {
+                            return;
+                        }
+                        const label = raw || value;
+                        const deduped = (this.sipRecentTargets || []).filter((item) => item && item.value !== value);
+                        this.sipRecentTargets = [{ value, label }, ...deduped].slice(0, 5);
+                        this.persistRecentTargets();
+                    },
+                    normalizeIceServers(servers) {
+                        if (!Array.isArray(servers)) {
+                            return [];
+                        }
+                        return servers
+                            .map((item) => {
+                                if (!item) {
+                                    return null;
+                                }
+                                const urls = Array.isArray(item.urls)
+                                    ? item.urls.filter((url) => typeof url === 'string' && url.trim())
+                                    : (typeof item.urls === 'string' && item.urls.trim()
+                                        ? [item.urls.trim()]
+                                        : []);
+                                if (!urls.length) {
+                                    return null;
+                                }
+                                const server = { urls };
+                                if (item.username) {
+                                    server.username = item.username;
+                                }
+                                if (item.credential) {
+                                    server.credential = item.credential;
+                                }
+                                return server;
+                            })
+                            .filter(Boolean);
+                    },
+                    async ensureIceServers(options = {}) {
+                        const force = Boolean(options?.force);
+                        if (this.sipIceServersPromise) {
+                            try {
+                                await this.sipIceServersPromise;
+                            } catch (err) {
+                                // handled downstream
+                            }
+                            return this.sipIceServers;
+                        }
+                        if (this.sipIceServersFetched && !force) {
+                            return this.sipIceServers;
+                        }
+                        this.sipIceServersPromise = this.fetchIceServers({ force });
+                        try {
+                            await this.sipIceServersPromise;
+                        } finally {
+                            this.sipIceServersPromise = null;
+                        }
+                        return this.sipIceServers;
+                    },
+                    async fetchIceServers({ force = false } = {}) {
+                        if (this.sipIceServersLoading && !force) {
+                            return this.sipIceServers;
+                        }
+                        this.sipIceServersLoading = true;
+                        let servers = [];
+                        try {
+                            let url = '/iceservers';
+                            if (typeof window !== 'undefined' && window.location) {
+                                url = new URL('/iceservers', window.location.origin).toString();
+                            }
+                            const response = await fetch(url, {
+                                credentials: 'same-origin',
+                                headers: { Accept: 'application/json' },
+                            });
+                            const data = await response.json().catch(() => null);
+                            if (!response.ok) {
+                                const statusText = response.statusText || `status ${response.status}`;
+                                throw new Error(`request failed (${statusText})`);
+                            }
+                            servers = this.normalizeIceServers(data);
+                            if (!servers.length) {
+                                servers = this.normalizeIceServers(FALLBACK_ICE_SERVERS);
+                                if (!this.sipIceServersFetched || force) {
+                                    this.appendSipEvent('ICE server list empty, using fallback STUN.', 'warning');
+                                }
+                            } else if (!this.sipIceServersFetched || force) {
+                                const count = servers.length;
+                                this.appendSipEvent(`Loaded ${count} ICE server${count === 1 ? '' : 's'}.`, 'info');
+                            }
+                            this.sipIceServersError = null;
+                        } catch (err) {
+                            const message = err?.message || 'failed to load ICE servers';
+                            this.sipIceServersError = message;
+                            if (!this.sipIceServersFetched || force) {
+                                this.appendSipEvent(`ICE servers unavailable: ${message}. Using fallback STUN.`, 'warning');
+                            }
+                            servers = this.normalizeIceServers(FALLBACK_ICE_SERVERS);
+                        } finally {
+                            this.sipIceServers = servers;
+                            this.sipIceServersLoading = false;
+                            this.sipIceServersFetched = true;
+                        }
+                        return this.sipIceServers;
+                    },
+                    async runWebrtcTest() {
+                        if (this.webrtcTest.loading) {
+                            return;
+                        }
+                        if (typeof window === 'undefined' || typeof window.RTCPeerConnection === 'undefined') {
+                            this.webrtcTest.error = 'WebRTC APIs are not available in this browser.';
+                            return;
+                        }
+                        this.webrtcTest.loading = true;
+                        this.webrtcTest.error = null;
+                        this.webrtcTest.result = null;
+                        let pc;
+                        let dataChannel = null;
+                        try {
+                            let servers = [];
+                            let usingServerList = false;
+                            if (this.webrtcTest.useServerIce) {
+                                const resolved = await this.ensureIceServers();
+                                if (Array.isArray(resolved) && resolved.length) {
+                                    servers = resolved;
+                                    usingServerList = !this.sipIceServersError;
+                                }
+                            }
+                            if (!servers.length) {
+                                servers = this.normalizeIceServers(FALLBACK_ICE_SERVERS);
+                                usingServerList = false;
+                            }
+                            const config = servers.length ? { iceServers: servers } : {};
+                            const started = typeof performance !== 'undefined' ? performance.now() : Date.now();
+                            let firstCandidateMs = null;
+                            const allCandidates = [];
+                            const gatherTimeoutMs = 10000;
+                            pc = new RTCPeerConnection(config);
+                            try {
+                                dataChannel = pc.createDataChannel('rustpbx-probe');
+                            } catch (err) {
+                                // ignore data channel errors (not critical for ICE gathering)
+                            }
+                            const gatherPromise = new Promise((resolve, reject) => {
+                                let settled = false;
+                                const timeoutId = setTimeout(() => {
+                                    if (settled) {
+                                        return;
+                                    }
+                                    settled = true;
+                                    reject(new Error(`ICE gathering timed out after ${Math.round(gatherTimeoutMs / 1000)} seconds.`));
+                                }, gatherTimeoutMs);
+                                const finish = () => {
+                                    if (settled) {
+                                        return;
+                                    }
+                                    settled = true;
+                                    clearTimeout(timeoutId);
+                                    resolve();
+                                };
+                                pc.onicecandidate = (event) => {
+                                    if (event && event.candidate) {
+                                        if (firstCandidateMs === null) {
+                                            const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+                                            firstCandidateMs = now - started;
+                                        }
+                                        const source = event.candidate;
+                                        const payload = typeof source.toJSON === 'function' ? source.toJSON() : {};
+                                        const entry = {
+                                            id: `cand-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                                            type: source.type || payload.type || '',
+                                            protocol: source.protocol || payload.protocol || '',
+                                            address: source.address || payload.address || '',
+                                            port: source.port || payload.port || null,
+                                            candidate: source.candidate,
+                                            foundation: source.foundation || payload.foundation || '',
+                                            priority: source.priority || payload.priority || null,
+                                            relatedAddress: source.relatedAddress || payload.relatedAddress || '',
+                                            relatedPort: source.relatedPort || payload.relatedPort || null,
+                                        };
+                                        allCandidates.push(entry);
+                                    } else {
+                                        finish();
+                                    }
+                                };
+                                pc.onicegatheringstatechange = () => {
+                                    if (pc.iceGatheringState === 'complete') {
+                                        finish();
+                                    }
+                                };
+                            });
+                            const offer = await pc.createOffer({ offerToReceiveAudio: false, offerToReceiveVideo: false });
+                            await pc.setLocalDescription(offer);
+                            let gatherError = null;
+                            try {
+                                await gatherPromise;
+                            } catch (err) {
+                                gatherError = err;
+                            }
+                            const ended = typeof performance !== 'undefined' ? performance.now() : Date.now();
+                            const totalMs = Math.max(1, Math.round(ended - started));
+                            const typeCounts = allCandidates.reduce((acc, item) => {
+                                const key = (item.type || 'unknown').toLowerCase();
+                                acc[key] = (acc[key] || 0) + 1;
+                                return acc;
+                            }, {});
+                            const typeSummary = Object.keys(typeCounts).length
+                                ? Object.entries(typeCounts)
+                                    .map(([key, count]) => `${key}:${count}`)
+                                    .join(', ')
+                                : '—';
+                            const uniqueAddresses = Array.from(
+                                new Set(allCandidates.map((item) => item.address).filter(Boolean)),
+                            );
+                            const displayedCandidates = allCandidates.slice(0, 12);
+                            const normalizedServers = Array.isArray(servers)
+                                ? servers.map((server) => ({
+                                    urls: Array.isArray(server.urls) ? server.urls : [],
+                                    username: server.username || null,
+                                    credentialSupplied: Boolean(server.credential),
+                                }))
+                                : [];
+                            const safeState = (getter) => {
+                                try {
+                                    return getter();
+                                } catch (err) {
+                                    return null;
+                                }
+                            };
+                            const connectionState = safeState(() =>
+                                pc && typeof pc.connectionState === 'string'
+                                    ? pc.connectionState
+                                    : (pc ? pc.connectionState : null),
+                            );
+                            const iceConnectionState = safeState(() => (pc ? pc.iceConnectionState : null));
+                            const signalingState = safeState(() => (pc ? pc.signalingState : null));
+                            const localDescriptionSize = safeState(() => {
+                                if (pc && pc.localDescription && typeof pc.localDescription.sdp === 'string') {
+                                    return pc.localDescription.sdp.length;
+                                }
+                                return null;
+                            });
+                            const status = gatherError ? 'timeout' : 'completed';
+                            const diagnostics = {
+                                gatherStatus: pc ? pc.iceGatheringState : null,
+                                iceConnectionState,
+                                connectionState,
+                                signalingState,
+                                gatherElapsedMs: totalMs,
+                                firstCandidateMs: firstCandidateMs !== null ? Math.round(firstCandidateMs) : null,
+                                candidateTotal: allCandidates.length,
+                                localDescriptionSize,
+                                usingServerList,
+                            };
+                            const resultPayload = {
+                                timestamp: new Date().toISOString(),
+                                status,
+                                errorMessage: gatherError ? gatherError.message : null,
+                                errorDetail: null,
+                                iceSource: usingServerList ? 'server' : 'fallback',
+                                iceServers: normalizedServers,
+                                timeToFirstCandidateMs: firstCandidateMs !== null ? Math.round(firstCandidateMs) : null,
+                                iceGatherDurationMs: totalMs,
+                                candidates: displayedCandidates,
+                                candidateTotal: allCandidates.length,
+                                typeSummary,
+                                addresses: uniqueAddresses,
+                                diagnostics,
+                            };
+                            if (gatherError) {
+                                const serverSummary = normalizedServers.length
+                                    ? normalizedServers
+                                        .map((server, index) => {
+                                            const urls = server.urls.join(', ') || '<missing-urls>';
+                                            const auth = server.username ? ` user=${server.username}` : '';
+                                            const cred = server.credentialSupplied ? ' credential=true' : '';
+                                            return `[${index + 1}] ${urls}${auth}${cred}`;
+                                        })
+                                        .join('; ')
+                                    : 'none';
+                                const detailParts = [
+                                    gatherError.message || 'ICE gathering failed.',
+                                    `servers=${serverSummary}`,
+                                    `states[gather=${diagnostics.gatherStatus || 'unknown'}, ice=${diagnostics.iceConnectionState || 'unknown'}, conn=${diagnostics.connectionState || 'unknown'}, signaling=${diagnostics.signalingState || 'unknown'}]`,
+                                    `candidates=${allCandidates.length}`,
+                                    `elapsed=${totalMs}ms`,
+                                    `mode=${usingServerList ? 'server' : 'fallback'}`,
+                                ];
+                                const detailString = detailParts.join(' · ');
+                                this.webrtcTest.error = detailString;
+                                resultPayload.errorDetail = detailString;
+                            } else {
+                                this.webrtcTest.error = null;
+                            }
+                            this.webrtcTest.result = resultPayload;
+                        } catch (err) {
+                            this.webrtcTest.error = err?.message || 'WebRTC probe failed.';
+                            this.webrtcTest.result = null;
+                        } finally {
+                            this.webrtcTest.loading = false;
+                            if (dataChannel && dataChannel.close) {
+                                try {
+                                    dataChannel.close();
+                                } catch (err) {
+                                    // ignore close errors
+                                }
+                            }
+                            if (pc && pc.close) {
+                                try {
+                                    pc.close();
+                                } catch (err) {
+                                    // ignore close errors
+                                }
+                            }
+                        }
+                    },
+                    bindSipUa(ua) {
+                        if (sipUa && sipUa !== ua) {
+                            try { sipUa.stop(); } catch (e) { }
+                        }
+                        sipUa = ua;
+                        this.sipUaReady = true;
+                        this.sipRegistered = false;
+                        this.sipRegistering = false;
+
+                        ua.on('connected', () => {
+                            this.appendSipEvent('WebSocket connected', 'success');
+                            this.setSipStatus('Connected', 'pending');
+                            this.ensureTransportTap();
+                            this.sipUaReady = true;
+                        });
+
+                        ua.on('disconnected', () => {
+                            this.appendSipEvent('WebSocket disconnected', 'warning');
+                            this.setSipStatus('Disconnected', 'idle');
+                            this.sipUaReady = false;
+                            this.resetSipSessionState();
+                        });
+
+                        ua.on('newRTCSession', (data) => {
+                            const session = data.session;
+                            if (sipSession && session !== sipSession) {
+                                this.appendSipEvent('Rejecting concurrent session (busy).', 'warning');
+                                session.terminate({ status_code: 486, reason_phrase: 'Busy Here' });
+                                return;
+                            }
+                            if (data.originator === 'remote') {
+                                const identity = session.remote_identity;
+                                const displayName = identity?.display_name || identity?.uri?.user || 'Unknown caller';
+                                const uriText = identity?.uri?.toString ? identity.uri.toString() : '';
+                                this.sipIncoming = { displayName, uri: uriText };
+                                this.appendSipEvent(`Incoming call from ${displayName}`, 'info');
+                                this.bindSipSession(session, 'incoming');
+                            } else {
+                                this.bindSipSession(session, 'outgoing');
+                            }
+                        });
+
+                        ua.on('newMessage', (data) => {
+                            const msg = data.message;
+                            const sender = msg.remote_identity.uri.user;
+                            const text = msg.body;
+                            this.appendSipEvent(`Message from ${sender}: ${text}`, 'info');
+                        });
+
+                        // Ensure tap immediately if already connected
+                        if (ua.isConnected && ua.isConnected()) {
+                            this.ensureTransportTap();
+                        }
+                    },
+                    async registerSip() {
+                        if (this.sipRegistering) {
+                            return;
+                        }
+                        if (typeof window === 'undefined' || !window.JsSIP) {
+                            this.sipRegisterError = 'JsSIP library not loaded yet. Please retry in a moment.';
+                            return;
+                        }
+                        const wsUrl = (this.sipForm.wsServer || '').trim();
+                        const rawUri = (this.sipForm.uri || '').trim();
+                        if (!wsUrl || !rawUri) {
+                            this.sipRegisterError = 'Provide both the WebSocket URL and SIP URI.';
+                            return;
+                        }
+                        const parsed = this.parseSipUri(rawUri);
+                        if (!parsed) {
+                            this.sipRegisterError = 'Invalid SIP URI (expected sip:1001@rustpbx.com).';
+                            return;
+                        }
+                        await this.ensureIceServers();
+                        this.sipRegisterError = null;
+                        this.sipRegistering = true;
+                        this.setSipStatus('Connecting...', 'pending');
+                        this.appendSipEvent(`Connecting to ${wsUrl}`, 'info');
+                        if (sipUa) {
+                            try {
+                                sipUa.stop();
+                            } catch (err) {
+                                // ignore cleanup errors
+                            }
+                            sipUa = null;
+                            this.sipUaReady = false;
+                        }
+                        try {
+                            if (!this.sipDebugEnabled && window.JsSIP?.debug) {
+                                JsSIP.debug.enable('JsSIP:Transport JsSIP:RTCSession');
+                                this.sipDebugEnabled = true;
+                            }
+                        } catch (err) {
+                            // ignore debug errors
+                        }
+                        const socket = new JsSIP.WebSocketInterface(wsUrl);
+                        const configuration = {
+                            sockets: [socket],
+                            uri: parsed.uri,
+                            password: this.sipForm.password || '',
+                            register: true,
+                            display_name: this.sipForm.displayName || parsed.user,
+                        };
+                        if (this.sipForm.authUser && this.sipForm.authUser.trim()) {
+                            configuration.authorization_user = this.sipForm.authUser.trim();
+                        } else {
+                            configuration.authorization_user = parsed.user;
+                        }
+                        console.log('[Diagnostics] Registering SIP:', {
+                            uri: configuration.uri,
+                            hasPassword: !!configuration.password,
+                            authUser: configuration.authorization_user
+                        });
+                        if (!configuration.password) {
+                            console.warn('[Diagnostics] No password provided for SIP registration. Authentication may fail.');
+                        }
+                        const iceServers = Array.isArray(this.sipIceServers) ? this.sipIceServers : [];
+                        if (iceServers.length) {
+                            configuration.pcConfig = { iceServers };
+                            configuration.iceServers = iceServers;
+                        }
+                        const ua = new JsSIP.UA(configuration);
+                        sipUa = ua;
+                        this.sipUaReady = true;
+                        ua.on('connected', () => {
+                            this.appendSipEvent('WebSocket connected', 'success');
+                            this.setSipStatus('Connected', 'pending');
+                            this.ensureTransportTap();
+                            this.sipUaReady = true;
+                        });
+                        ua.on('disconnected', () => {
+                            this.appendSipEvent('WebSocket disconnected', 'warning');
+                            this.setSipStatus(this.sipRegistered ? 'Disconnected' : 'Unregistered', this.sipRegistered ? 'error' : 'idle');
+                            this.sipRegistered = false;
+                            this.sipRegistering = false;
+                            this.sipUaReady = false;
+                            this.resetSipSessionState();
+                        });
+                        ua.on('registered', () => {
+                            this.sipRegistered = true;
+                            this.sipRegistering = false;
+                            this.appendSipEvent('Registered', 'success');
+                            this.setSipStatus('Registered', 'success');
+                            this.ensureTransportTap();
+                            this.sipUaReady = true;
+                        });
+                        ua.on('unregistered', () => {
+                            this.appendSipEvent('Unregistered', 'info');
+                            this.setSipStatus('Unregistered', 'idle');
+                            this.sipRegistered = false;
+                            this.sipUaReady = false;
+                            if (!this.sipRegistering) {
+                                this.resetSipSessionState();
+                            }
+                        });
+                        ua.on('registrationFailed', (data) => {
+                            const cause = data?.cause || 'unknown';
+                            this.appendSipEvent(`Registration failed: ${cause}`, 'error');
+                            this.sipRegisterError = `Registration failed: ${cause}`;
+                            this.setSipStatus('Registration failed', 'error');
+                            this.sipRegistering = false;
+                            this.sipRegistered = false;
+                            this.sipUaReady = false;
+                            try {
+                                ua.stop();
+                            } catch (err) {
+                                // ignore
+                            }
+                        });
+                        ua.on('newRTCSession', (data) => {
+                            const session = data.session;
+                            if (sipSession && session !== sipSession) {
+                                this.appendSipEvent('Rejecting concurrent session (busy).', 'warning');
+                                session.terminate({ status_code: 486, reason_phrase: 'Busy Here' });
+                                return;
+                            }
+                            if (data.originator === 'remote') {
+                                const identity = session.remote_identity;
+                                const displayName = identity?.display_name || identity?.uri?.user || 'Unknown caller';
+                                const uriText = identity?.uri?.toString ? identity.uri.toString() : '';
+                                this.sipIncoming = { displayName, uri: uriText };
+                                this.appendSipEvent(`Incoming call from ${displayName}`, 'info');
+                                this.bindSipSession(session, 'incoming');
+                            } else {
+                                this.bindSipSession(session, 'outgoing');
+                            }
+                        });
+                        ua.on('newMessage', (data) => {
+                            const originator = data.originator === 'remote' ? 'incoming' : 'outgoing';
+                            this.appendSipEvent(`${originator === 'incoming' ? 'Received' : 'Sent'} MESSAGE`, 'info');
+                        });
+                        try {
+                            ua.start();
+                        } catch (err) {
+                            const message = err?.message || 'Failed to start JsSIP UA';
+                            this.sipRegisterError = message;
+                            this.appendSipEvent(`UA start failed: ${message}`, 'error');
+                            this.setSipStatus('Unregistered', 'error');
+                            this.sipRegistering = false;
+                            this.sipUaReady = false;
+                            sipUa = null;
+                        }
+                    },
+                    unregisterSip() {
+                        this.sipRegisterError = null;
+                        this.appendSipEvent('Manual unregister requested', 'warning');
+                        if (sipSession) {
+                            this.hangupSipCall();
+                        }
+                        if (sipUa) {
+                            try {
+                                sipUa.unregister();
+                                sipUa.stop();
+                            } catch (err) {
+                                // ignore
+                            }
+                            sipUa = null;
+                            this.sipUaReady = false;
+                        }
+                        this.sipRegistered = false;
+                        this.sipRegistering = false;
+                        this.setSipStatus('Unregistered', 'idle');
+                    },
+                    async placeSipCall() {
+                        const handler = this.activePlugins.find(p => p.mode === this.callMode && p.handleCall);
+                        if (handler) {
+                            await handler.handleCall(this);
+                            return;
+                        }
+                        if (!sipUa || !this.sipRegistered) {
+                            this.sipCallError = 'Register before placing a call.';
+                            return;
+                        }
+                        if (sipSession) {
+                            this.sipCallError = 'A call is already in progress.';
+                            return;
+                        }
+                        const rawTarget = this.sipForm.target;
+                        const targetUri = this.buildTargetUri(rawTarget);
+                        if (!targetUri) {
+                            this.sipCallError = 'Enter a destination URI or number.';
+                            return;
+                        }
+                        await this.ensureIceServers();
+                        this.rememberRecentTarget(rawTarget, targetUri);
+                        this.sipCallError = null;
+                        let mediaStream = null;
+                        try {
+                            this.sipCallStatus = 'Requesting microphone access...';
+                            mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                            this.sipLocalStream = mediaStream;
+                            if (this.$refs.sipLocalAudio) {
+                                this.$refs.sipLocalAudio.srcObject = mediaStream;
+                                this.$refs.sipLocalAudio.muted = true; // keep local monitor silent to avoid echo
+                            }
+                        } catch (err) {
+                            const message = err?.message || 'Unable to access microphone';
+                            this.sipCallError = message;
+                            this.sipCallStatus = 'Idle';
+                            this.appendSipEvent(`Microphone access failed: ${message}`, 'error');
+                            return;
+                        }
+                        const options = {
+                            mediaStream,
+                            mediaConstraints: { audio: true, video: false },
+                            rtcOfferConstraints: { offerToReceiveAudio: true, offerToReceiveVideo: false },
+                            sessionTimersExpires: 120,
+                        };
+                        const iceServers = Array.isArray(this.sipIceServers) ? this.sipIceServers : [];
+                        if (iceServers.length) {
+                            options.pcConfig = { iceServers };
+                        }
+                        this.appendSipEvent(`Calling ${targetUri}`, 'info');
+                        try {
+                            const session = sipUa.call(targetUri, options);
+                            this.bindSipSession(session, 'outgoing');
+                        } catch (err) {
+                            const message = err?.message || 'Call failed';
+                            this.sipCallError = message;
+                            this.sipCallStatus = 'Idle';
+                            this.appendSipEvent(`Call start failed: ${message}`, 'error');
+                            this.releaseLocalStream();
+                        }
+                    },
+                    hangupSipCall() {
+                        if (!sipSession) {
+                            return;
+                        }
+                        this.appendSipEvent('Call terminated by user', 'warning');
+                        sipSession.terminate();
+                        this.resetSipSessionState();
+                    },
+                    async answerIncomingCall() {
+                        if (!sipSession || this.sipCallDirection !== 'incoming') {
+                            return;
+                        }
+                        this.sipCallError = null;
+                        try {
+                            await this.ensureIceServers();
+                            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                            this.sipLocalStream = stream;
+                            if (this.$refs.sipLocalAudio) {
+                                this.$refs.sipLocalAudio.srcObject = stream;
+                                this.$refs.sipLocalAudio.muted = true; // silence local monitor for incoming calls
+                            }
+                            const options = {
+                                mediaStream: stream,
+                                mediaConstraints: { audio: true, video: false },
+                            };
+                            const iceServers = Array.isArray(this.sipIceServers) ? this.sipIceServers : [];
+                            if (iceServers.length) {
+                                options.pcConfig = { iceServers };
+                            }
+                            sipSession.answer(options);
+                            this.appendSipEvent('Answered incoming call', 'success');
+                            this.sipIncoming = null;
+                        } catch (err) {
+                            const message = err?.message || 'Unable to access microphone';
+                            this.sipCallError = message;
+                            this.appendSipEvent(`Failed to answer: ${message}`, 'error');
+                        }
+                    },
+                    rejectIncomingCall() {
+                        if (!sipSession || this.sipCallDirection !== 'incoming') {
+                            return;
+                        }
+                        this.appendSipEvent('Rejected incoming call', 'warning');
+                        try {
+                            sipSession.terminate({ status_code: 486, reason_phrase: 'Busy Here' });
+                        } catch (err) {
+                            // ignore
+                        }
+                        this.resetSipSessionState();
+                    },
+                    bindSipSession(session, direction) {
+                        // Clean up any previous session state to prevent audio bleeding
+                        if (this.sipRemoteStream) {
+                            try {
+                                this.sipRemoteStream.getTracks().forEach((track) => track.stop());
+                            } catch (err) {
+                                // ignore
+                            }
+                            this.sipRemoteStream = null;
+                        }
+                        if (this.$refs.sipRemoteAudio) {
+                            this.$refs.sipRemoteAudio.srcObject = null;
+                        }
+
+                        sipSession = session;
+                        this.hasSipSession = true;
+                        this.sipCallDirection = direction;
+                        this.sipCallStatus = direction === 'incoming' ? 'Waiting for answer...' : 'Calling...';
+                        this.sipCallError = null;
+                        session.on('progress', () => {
+                            this.sipCallStatus = 'Ringing...';
+                        });
+                        session.on('accepted', () => {
+                            const identity = session.remote_identity;
+                            const name = identity?.display_name || identity?.uri?.user || 'remote party';
+                            this.sipCallStatus = `Answered by ${name}`;
+                        });
+                        session.on('confirmed', () => {
+                            const identity = session.remote_identity;
+                            const name = identity?.display_name || identity?.uri?.user || 'remote party';
+                            this.sipCallStatus = `In call with ${name}`;
+                        });
+                        session.on('failed', (data) => {
+                            const cause = data?.cause || 'unknown reason';
+                            this.sipCallStatus = 'Failed';
+                            this.sipCallError = `Call failed: ${cause}`;
+                            this.appendSipEvent(`Call failed: ${cause}`, 'error');
+                            this.resetSipSessionState();
+                        });
+                        session.on('ended', (data) => {
+                            const cause = data?.cause ? ` (${data.cause})` : '';
+                            this.appendSipEvent(`Call ended${cause}`, 'info');
+                            this.sipCallStatus = 'Idle';
+                            this.resetSipSessionState();
+                        });
+                        session.on('sendingRequest', (event) => {
+                            const method = event?.request?.method;
+                            if (!method) {
+                                return;
+                            }
+                            const normalized = String(method).toUpperCase();
+                            if (normalized === 'CANCEL' || normalized === 'BYE') {
+                                this.appendSipEvent(`Sent ${normalized}`, normalized === 'CANCEL' ? 'warning' : 'info');
+                            }
+                        });
+                        session.on('peerconnection', (event) => {
+                            this.handlePeerConnection(event?.peerconnection || session.connection);
+                        });
+
+                        if (session.connection) {
+                            this.handlePeerConnection(session.connection);
+                        }
+                    },
+                    handlePeerConnection(pc) {
+                        if (!pc) {
+                            return;
+                        }
+
+                        // For quick reconnects, clean up old receivers if PC is being reused
+                        if (pc.__rustpbxAttached) {
+                            // PC is being reused - stop old receiver tracks and return
+                            // (event listener already attached)
+                            try {
+                                if (pc.getReceivers) {
+                                    pc.getReceivers().forEach((receiver) => {
+                                        if (receiver.track) {
+                                            receiver.track.stop();
+                                        }
+                                    });
+                                }
+                            } catch (err) {
+                                // ignore
+                            }
+                            return; // Don't re-attach event listener
+                        }
+                        pc.__rustpbxAttached = true;
+
+                        pc.addEventListener('track', (ev) => {
+                            const track = ev?.track;
+                            if (!track || (track.kind && track.kind !== 'audio')) {
+                                return;
+                            }
+                            const localTracks = this.sipLocalStream?.getTracks?.() || [];
+                            const isLocalTrack = localTracks.some((item) => item.id === track.id);
+                            if (isLocalTrack) {
+                                // Skip attaching the local microphone to the remote monitor.
+                                return;
+                            }
+                            if (typeof MediaStream === 'undefined') {
+                                const fallbackStream = ev.streams?.[0];
+                                if (fallbackStream && this.$refs.sipRemoteAudio) {
+                                    if (!this.sipLocalStream || fallbackStream.id !== this.sipLocalStream.id) {
+                                        this.$refs.sipRemoteAudio.srcObject = fallbackStream;
+                                    }
+                                }
+                                return;
+                            }
+                            if (!this.sipRemoteStream) {
+                                this.sipRemoteStream = new MediaStream();
+                            }
+                            const remoteStream = this.sipRemoteStream;
+                            if (!remoteStream.getTracks().some((item) => item.id === track.id)) {
+                                remoteStream.addTrack(track);
+                            }
+                            if (this.$refs.sipRemoteAudio && this.$refs.sipRemoteAudio.srcObject !== remoteStream) {
+                                this.$refs.sipRemoteAudio.srcObject = remoteStream;
+                            }
+                            const handleEnded = () => {
+                                if (!this.sipRemoteStream) {
+                                    track.removeEventListener('ended', handleEnded);
+                                    return;
+                                }
+                                try {
+                                    this.sipRemoteStream.removeTrack(track);
+                                } catch (err) {
+                                    // ignore removal errors
+                                }
+                                if (!this.sipRemoteStream.getTracks().length) {
+                                    this.sipRemoteStream = null;
+                                    if (this.$refs.sipRemoteAudio) {
+                                        this.$refs.sipRemoteAudio.srcObject = null;
+                                    }
+                                }
+                                track.removeEventListener('ended', handleEnded);
+                            };
+                            track.addEventListener('ended', handleEnded);
+                        });
+                    },
+                    resetSipSessionState() {
+                        // Clean up PeerConnection to prevent audio bleeding in quick reconnects
+                        if (sipSession && sipSession.connection) {
+                            const pc = sipSession.connection;
+                            try {
+                                // Stop all receiver tracks
+                                if (pc.getReceivers) {
+                                    pc.getReceivers().forEach((receiver) => {
+                                        if (receiver.track) {
+                                            receiver.track.stop();
+                                        }
+                                    });
+                                }
+                                // Close the PeerConnection
+                                if (pc.close && pc.connectionState !== 'closed') {
+                                    pc.close();
+                                }
+                            } catch (err) {
+                                // ignore cleanup errors
+                            }
+                        }
+                        sipSession = null;
+                        this.hasSipSession = false;
+                        this.sipCallDirection = null;
+                        this.sipIncoming = null;
+                        this.sipCallError = null;
+                        this.sipCallStatus = this.sipRegistered ? 'Idle' : 'Unregistered';
+                        this.releaseLocalStream();
+                        if (this.sipRemoteStream) {
+                            try {
+                                this.sipRemoteStream.getTracks().forEach((track) => track.stop());
+                            } catch (err) {
+                                // ignore track stop errors
+                            }
+                            this.sipRemoteStream = null;
+                        }
+                        if (this.$refs.sipRemoteAudio) {
+                            this.$refs.sipRemoteAudio.srcObject = null;
+                        }
+                    },
+                    releaseLocalStream() {
+                        if (this.sipLocalStream) {
+                            try {
+                                this.sipLocalStream.getTracks().forEach((track) => track.stop());
+                            } catch (err) {
+                                // ignore
+                            }
+                        }
+                        this.sipLocalStream = null;
+                        if (this.$refs.sipLocalAudio) {
+                            this.$refs.sipLocalAudio.srcObject = null;
+                            this.$refs.sipLocalAudio.muted = true;
+                        }
+                    },
+                    appendSipEvent(message, level = 'info') {
+                        const labels = {
+                            success: 'Success',
+                            error: 'Error',
+                            warning: 'Warning',
+                            info: 'Info',
+                            pending: 'Pending',
+                            idle: 'Info',
+                        };
+                        const event = {
+                            id: `event-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                            time: new Date().toLocaleTimeString(),
+                            message,
+                            level,
+                            levelLabel: labels[level] || 'Info',
+                        };
+                        this.sipEvents = [event, ...this.sipEvents].slice(0, 80);
+                    },
+                    setSipStatus(text, variant = 'idle') {
+                        this.sipStatusText = text;
+                        this.sipStatusVariant = variant;
+                    },
+                    sipStatusPill(variant) {
+                        switch ((variant || '').toLowerCase()) {
+                            case 'success':
+                                return 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200';
+                            case 'error':
+                                return 'bg-rose-50 text-rose-600 ring-1 ring-rose-200';
+                            case 'warning':
+                                return 'bg-amber-50 text-amber-600 ring-1 ring-amber-200';
+                            case 'pending':
+                                return 'bg-sky-50 text-sky-600 ring-1 ring-sky-200';
+                            default:
+                                return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200';
+                        }
+                    },
+                    sipEventPill(level) {
+                        switch ((level || '').toLowerCase()) {
+                            case 'success':
+                                return 'bg-emerald-100 text-emerald-700';
+                            case 'error':
+                                return 'bg-rose-100 text-rose-700';
+                            case 'warning':
+                                return 'bg-amber-100 text-amber-700';
+                            case 'pending':
+                                return 'bg-sky-100 text-sky-700';
+                            default:
+                                return 'bg-slate-100 text-slate-600';
+                        }
+                    },
+                    sipStatusDot(variant) {
+                        switch ((variant || '').toLowerCase()) {
+                            case 'success':
+                                return 'bg-emerald-500';
+                            case 'error':
+                                return 'bg-rose-500';
+                            case 'warning':
+                                return 'bg-amber-500';
+                            case 'pending':
+                                return 'bg-sky-500';
+                            default:
+                                return 'bg-slate-400';
+                        }
+                    },
+                    appendSipTraffic(direction, payload) {
+                        if (!payload && payload !== 0) {
+                            return;
+                        }
+                        let text;
+                        if (typeof payload === 'string') {
+                            text = payload;
+                        } else if (payload instanceof ArrayBuffer) {
+                            try {
+                                text = new TextDecoder().decode(payload);
+                            } catch (err) {
+                                text = '[binary payload]';
+                            }
+                        } else if (ArrayBuffer.isView(payload)) {
+                            try {
+                                text = new TextDecoder().decode(payload.buffer);
+                            } catch (err) {
+                                text = '[binary payload]';
+                            }
+                        } else {
+                            text = String(payload);
+                        }
+                        const last = this.sipTraffic[this.sipTraffic.length - 1];
+                        if (last && last.direction === direction && last.payload === text) {
+                            return;
+                        }
+                        const summary = text.split(/\r?\n/)[0] || (direction === 'outgoing' ? 'Outbound message' : 'Inbound message');
+                        const entry = {
+                            id: `traffic-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                            time: new Date().toLocaleTimeString(),
+                            direction,
+                            summary,
+                            payload: text,
+                        };
+                        const limit = Number(this.sipTrafficLimit) || 80;
+                        this.sipTraffic = [...this.sipTraffic, entry].slice(-limit);
+                        this.$nextTick(() => {
+                            if (!this.sipTrafficAutoScroll) {
+                                return;
+                            }
+                            const container = this.$refs.sipTrafficContainer;
+                            if (container) {
+                                container.scrollTop = container.scrollHeight;
+                            }
+                        });
+                    },
+                    ensureTransportTap() {
+                        if (!sipUa || !sipUa.transport) {
+                            return;
+                        }
+                        const transport = sipUa.transport;
+                        const socketInterface = transport.socket || transport._socket || null;
+                        const ws = socketInterface?.__socket || socketInterface?._ws || transport._ws || socketInterface || null;
+                        const rawWs = ws && ws.readyState !== undefined ? ws : ws?._ws || null;
+                        const targetWs = rawWs || ws;
+                        if (!targetWs || targetWs.__rustpbxTap) {
+                            return;
+                        }
+                        targetWs.__rustpbxTap = true;
+                        const originalSend = typeof targetWs.send === 'function' ? targetWs.send.bind(targetWs) : null;
+                        if (originalSend) {
+                            targetWs.send = (data) => {
+                                if (typeof data === 'string' || data instanceof ArrayBuffer || ArrayBuffer.isView(data)) {
+                                    this.appendSipTraffic('outgoing', data);
+                                }
+                                return originalSend(data);
+                            };
+                        }
+                        const handleIncoming = (event) => {
+                            if (!event) {
+                                return;
+                            }
+                            const data = event.data;
+                            if (typeof data === 'string' || data instanceof ArrayBuffer) {
+                                this.appendSipTraffic('incoming', data);
+                            } else if (data && typeof data.text === 'function') {
+                                data.text().then((text) => this.appendSipTraffic('incoming', text)).catch(() => { });
+                            }
+                        };
+                        if (typeof targetWs.addEventListener === 'function') {
+                            targetWs.addEventListener('message', handleIncoming);
+                        } else if ('onmessage' in targetWs) {
+                            const originalHandler = targetWs.onmessage;
+                            targetWs.onmessage = (event) => {
+                                handleIncoming(event);
+                                if (typeof originalHandler === 'function') {
+                                    originalHandler.call(targetWs, event);
+                                }
+                            };
+                        }
+                    },
+                    clearSipEvents() {
+                        this.sipEvents = [];
+                    },
+                    clearSipTraffic() {
+                        this.sipTraffic = [];
+                    },
+                    buildTargetUri(target) {
+                        if (!target) {
+                            return null;
+                        }
+                        const trimmed = String(target).trim();
+                        if (!trimmed) {
+                            return null;
+                        }
+                        if (trimmed.startsWith('sip:')) {
+                            return trimmed;
+                        }
+                        if (trimmed.includes('@')) {
+                            return `sip:${trimmed}`;
+                        }
+                        const domain = this.sipDomain || this.parseSipUri(this.sipForm.uri)?.domain;
+                        if (!domain) {
+                            return trimmed;
+                        }
+                        return `sip:${trimmed}@${domain}`;
+                    },
+                    updateRoutingChecks(summary, latencyMs) {
+                        if (!summary) {
+                            return;
+                        }
+                        const rewrites = Array.isArray(summary.rewriteOperations) && summary.rewriteOperations.length
+                            ? summary.rewriteOperations
+                            : ['no rewrite'];
+                        const card = {
+                            id: `dynamic-${Date.now()}`,
+                            input: summary.input,
+                            direction: summary.direction,
+                            matched_route: summary.rule || 'None',
+                            selected_trunk: summary.trunk || '—',
+                            caller: summary.caller || null,
+                            sourceIp: summary.sourceIp || null,
+                            rewrites,
+                            result: summary.status === 'success' ? 'ok' : 'warning',
+                            latency_ms: latencyMs,
+                        };
+                        this.routingChecks = [card, ...this.routingChecks].slice(0, 8);
+                    },
+                    transformRoutingResult(data, input) {
+                        const outcome = data?.outcome || {};
+                        const type = (outcome.type || 'not_handled').toLowerCase();
+                        let status = 'warning';
+                        let statusLabel = 'Not handled';
+                        let badgeClass = 'bg-amber-50 text-amber-600 ring-1 ring-amber-200';
+                        let outcomeLabel = 'No matching route';
+                        let historyDetails = 'No routing rule matched.';
+                        const defaultRoute = Boolean(data?.used_default_route);
+                        if (type === 'forward') {
+                            status = defaultRoute ? 'warning' : 'success';
+                            statusLabel = defaultRoute ? 'Forwarded (default)' : 'Forwarded';
+                            badgeClass = defaultRoute
+                                ? 'bg-amber-50 text-amber-600 ring-1 ring-amber-200'
+                                : 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200';
+                            const destination = outcome.destination || data?.selected_trunk || '—';
+                            outcomeLabel = defaultRoute
+                                ? `Forwarded via default route (${destination})`
+                                : `Forwarded to ${destination}`;
+                            historyDetails = `Forward via ${data?.selected_trunk || '—'} → ${destination}`;
+                        } else if (type === 'abort') {
+                            status = 'error';
+                            statusLabel = 'Rejected';
+                            badgeClass = 'bg-rose-50 text-rose-600 ring-1 ring-rose-200';
+                            const code = outcome.code || '';
+                            const reason = outcome.reason ? ` ${outcome.reason}` : '';
+                            outcomeLabel = `Rejected ${code}${reason}`.trim();
+                            historyDetails = outcomeLabel;
+                        }
+                        const rewriteOperations = Array.isArray(data?.rewrite_operations)
+                            ? data.rewrite_operations
+                            : [];
+                        const rewritesDiff = Array.isArray(data?.rewrites) ? data.rewrites : [];
+                        const summary = {
+                            rule: data?.matched_rule || (defaultRoute ? 'Default route' : null),
+                            status,
+                            statusLabel,
+                            badgeClass,
+                            direction: data?.direction || '',
+                            input,
+                            trunk: data?.selected_trunk || null,
+                            destination: outcome.destination || null,
+                            caller: data?.caller || null,
+                            requestUri: data?.request_uri || null,
+                            sourceIp: data?.source_ip || null,
+                            sourceTrunk: data?.source_trunk || null,
+                            detectedTrunk: data?.detected_trunk || null,
+                            defaultRoute,
+                            outcomeLabel,
+                            historyDetails,
+                            createdAt: data?.evaluated_at || null,
+                            rewriteOperations,
+                            rewritesDiff,
+                            rewritesText: rewriteOperations.length
+                                ? rewriteOperations.join(', ')
+                                : 'No rewrite changes',
+                            headers: Array.isArray(outcome.headers) ? outcome.headers : [],
+                            credential: outcome.credential || null,
+                            abort: type === 'abort'
+                                ? { code: outcome.code, reason: outcome.reason || null }
+                                : null,
+                        };
+                        return summary;
+                    },
+                    routingStatusDot(status) {
+                        switch ((status || '').toLowerCase()) {
+                            case 'success':
+                                return 'bg-emerald-500';
+                            case 'error':
+                                return 'bg-rose-500';
+                            case 'warning':
+                                return 'bg-amber-500';
+                            default:
+                                return 'bg-slate-400';
+                        }
+                    },
+                    formatMs(value) {
+                        if (value === null || value === undefined || Number.isNaN(Number(value))) {
+                            return '—';
+                        }
+                        const ms = Number(value);
+                        if (ms < 1000) {
+                            return `${ms} ms`;
+                        }
+                        const seconds = ms / 1000;
+                        const precision = seconds >= 10 ? 1 : 2;
+                        return `${seconds.toFixed(precision)} s`;
+                    },
+                    webrtcStatusLabel(value) {
+                        switch ((value || '').toLowerCase()) {
+                            case 'completed':
+                                return 'Completed';
+                            case 'timeout':
+                                return 'Timeout';
+                            case 'failed':
+                                return 'Failed';
+                            default:
+                                return 'Unknown';
+                        }
+                    },
+                    webrtcStatusBadge(value) {
+                        switch ((value || '').toLowerCase()) {
+                            case 'completed':
+                                return 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200';
+                            case 'timeout':
+                                return 'bg-amber-50 text-amber-600 ring-1 ring-amber-200';
+                            case 'failed':
+                                return 'bg-rose-50 text-rose-600 ring-1 ring-rose-200';
+                            default:
+                                return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200';
+                        }
+                    },
+                    webrtcStatusDot(value) {
+                        switch ((value || '').toLowerCase()) {
+                            case 'completed':
+                                return 'bg-emerald-500';
+                            case 'timeout':
+                                return 'bg-amber-500';
+                            case 'failed':
+                                return 'bg-rose-500';
+                            default:
+                                return 'bg-slate-400';
+                        }
+                    },
+                    formatList(value) {
+                        if (!value || (Array.isArray(value) && !value.length)) {
+                            return '—';
+                        }
+                        if (Array.isArray(value)) {
+                            return value.filter((item) => item !== null && item !== undefined && item !== '')
+                                .map((item) => String(item))
+                                .join(', ');
+                        }
+                        return String(value);
+                    },
+                    displayValue(value) {
+                        if (!value && value !== 0) {
+                            return '—';
+                        }
+                        if (Array.isArray(value)) {
+                            return this.formatList(value);
+                        }
+                        if (typeof value === 'object') {
+                            return JSON.stringify(value);
+                        }
+                        return String(value);
+                    },
+                    formatDirection(value) {
+                        if (!value) {
+                            return '—';
+                        }
+                        if (Array.isArray(value)) {
+                            return value.map((item) => this.formatDirection(item)).join(' / ');
+                        }
+                        const key = String(value).toLowerCase();
+                        switch (key) {
+                            case 'inbound':
+                                return 'Inbound';
+                            case 'outbound':
+                                return 'Outbound';
+                            case 'internal':
+                                return 'Internal';
+                            case 'bidirectional':
+                                return 'Bidirectional';
+                            default:
+                                return String(value);
+                        }
+                    },
+                    applyDialogFilter() {
+                        const trimmed = (this.dialogCallIdInput || '').trim();
+                        this.dialogCallIdInput = trimmed;
+                        if (!trimmed) {
+                            if (this.dialogCallId) {
+                                this.dialogCallId = '';
+                                this.refreshDialogs();
+                            }
+                            return;
+                        }
+                        if (trimmed !== this.dialogCallId) {
+                            this.dialogCallId = trimmed;
+                        }
+                        this.refreshDialogs();
+                    },
+                    clearDialogFilter() {
+                        if (!this.dialogCallId && !(this.dialogCallIdInput && this.dialogCallIdInput.trim())) {
+                            return;
+                        }
+                        this.dialogCallIdInput = '';
+                        if (this.dialogCallId) {
+                            this.dialogCallId = '';
+                        }
+                        this.refreshDialogs();
+                    },
+                    ensureDialogsLoaded() {
+                        if (this.dialogsFetchedAt || this.dialogsLoading) {
+                            return;
+                        }
+                        this.fetchDialogs();
+                    },
+                    buildUrl(path) {
+                        const clean = path.startsWith('/') ? path : `/${path}`;
+                        return `${this.basePath}${clean}`;
+                    },
+                    async fetchDialogs(force = false) {
+                        if (this.dialogsLoading) {
+                            return;
+                        }
+                        if (!force && this.dialogsFetchedAt) {
+                            return;
+                        }
+                        this.dialogsLoading = true;
+                        this.dialogsError = null;
+                        try {
+                            const params = new URLSearchParams();
+                            if (this.dialogCallId) {
+                                params.set('call_id', this.dialogCallId);
+                            }
+                            params.set('limit', '20');
+                            let url = this.buildUrl('/diagnostics/dialogs');
+                            const query = params.toString();
+                            if (query) {
+                                url = `${url}?${query}`;
+                            }
+                            const response = await fetch(url, {
+                                credentials: 'same-origin',
+                            });
+                            const data = await response.json().catch(() => null);
+                            if (!response.ok) {
+                                const message = data?.message || `Failed to load dialogs (${response.status})`;
+                                throw new Error(message);
+                            }
+                            this.dialogs = Array.isArray(data?.items) ? data.items : [];
+                            this.dialogsMeta = {
+                                total: data?.total || 0,
+                                generated_at: data?.generated_at || null,
+                                has_more: Boolean(data?.has_more),
+                            };
+                            this.dialogsFetchedAt = data?.generated_at || new Date().toISOString();
+                        } catch (err) {
+                            this.dialogsError = err?.message || 'Failed to load dialogs.';
+                            this.dialogs = [];
+                            this.dialogsMeta = null;
+                            this.dialogsFetchedAt = null;
+                        } finally {
+                            this.dialogsLoading = false;
+                        }
+                    },
+                    refreshDialogs() {
+                        this.dialogsFetchedAt = null;
+                        this.fetchDialogs(true);
+                    },
+                    dialogRolePill(role) {
+                        const key = (role || '').toLowerCase();
+                        if (key === 'server') {
+                            return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200';
+                        }
+                        if (key === 'client') {
+                            return 'bg-sky-50 text-sky-600 ring-1 ring-sky-200';
+                        }
+                        return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200';
+                    },
+                    dialogStatePill(state) {
+                        const key = (state || '').toLowerCase();
+                        if (key === 'confirmed') {
+                            return 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200';
+                        }
+                        if (['early', 'trying', 'calling'].includes(key)) {
+                            return 'bg-sky-50 text-sky-600 ring-1 ring-sky-200';
+                        }
+                        if (['waitack', 'updated', 'notify', 'info', 'options'].includes(key)) {
+                            return 'bg-amber-50 text-amber-600 ring-1 ring-amber-200';
+                        }
+                        return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200';
+                    },
+                    async performLocatorLookup(options = {}) {
+                        const preserveClearFeedback = Boolean(options?.preserveClearFeedback);
+                        if (!this.hasLocatorInput) {
+                            this.locatorError = 'Provide a user or SIP URI to continue.';
+                            return false;
+                        }
+                        this.locatorError = null;
+                        if (!preserveClearFeedback) {
+                            this.locatorClearFeedback = null;
+                        }
+                        this.locatorLoading = true;
+                        try {
+                            const response = await fetch(this.buildUrl('/diagnostics/locator/lookup'), {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                credentials: 'same-origin',
+                                body: JSON.stringify({
+                                    user: this.locatorUser || null,
+                                    uri: this.locatorUri || null,
+                                }),
+                            });
+                            const data = await response.json().catch(() => null);
+                            if (!response.ok) {
+                                const message = data?.message || `Lookup failed (${response.status})`;
+                                throw new Error(message);
+                            }
+                            this.locatorResult = data;
+                            return true;
+                        } catch (err) {
+                            this.locatorError = err?.message || 'Lookup failed.';
+                            this.locatorResult = null;
+                            return false;
+                        } finally {
+                            this.locatorLoading = false;
+                        }
+                    },
+                    async clearLocator() {
+                        if (!this.hasLocatorInput) {
+                            this.locatorError = 'Provide a user or SIP URI before clearing.';
+                            return;
+                        }
+                        this.locatorError = null;
+                        this.locatorClearing = true;
+                        try {
+                            const response = await fetch(this.buildUrl('/diagnostics/locator/clear'), {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                credentials: 'same-origin',
+                                body: JSON.stringify({
+                                    user: this.locatorUser || null,
+                                    uri: this.locatorUri || null,
+                                }),
+                            });
+                            const data = await response.json().catch(() => null);
+                            if (!response.ok) {
+                                const message = data?.message || `Clear failed (${response.status})`;
+                                throw new Error(message);
+                            }
+                            const removed = Boolean(data?.removed);
+                            const remaining = typeof data?.remaining === 'number' ? data.remaining : null;
+                            this.locatorClearFeedback = {
+                                message: removed
+                                    ? remaining
+                                        ? `Cleared registration; ${remaining} binding(s) remain.`
+                                        : 'Cleared registration.'
+                                    : 'No registration matched the request.',
+                                variant: removed ? 'success' : 'warning',
+                            };
+                            await this.performLocatorLookup({ preserveClearFeedback: true });
+                        } catch (err) {
+                            this.locatorError = err?.message || 'Clear failed.';
+                        } finally {
+                            this.locatorClearing = false;
+                        }
+                    },
+                    resetLocator() {
+                        this.locatorUser = '';
+                        this.locatorUri = '';
+                        this.locatorResult = null;
+                        this.locatorError = null;
+                        this.locatorClearFeedback = null;
+                    },
+                    formatDateTime(value) {
+                        if (!value) {
+                            return '—';
+                        }
+                        try {
+                            const date = new Date(value);
+                            if (Number.isNaN(date.getTime())) {
+                                return value;
+                            }
+                            return date.toLocaleString();
+                        } catch (err) {
+                            return value;
+                        }
+                    },
+                    formatDuration(value) {
+                        if (value === null || value === undefined) {
+                            return '—';
+                        }
+                        const seconds = Number(value);
+                        if (!Number.isFinite(seconds)) {
+                            return '—';
+                        }
+                        if (seconds >= 3600) {
+                            const hours = Math.floor(seconds / 3600);
+                            const minutes = Math.floor((seconds % 3600) / 60);
+                            return `${hours}h ${minutes}m`;
+                        }
+                        if (seconds >= 60) {
+                            const minutes = Math.floor(seconds / 60);
+                            const secs = Math.floor(seconds % 60);
+                            return `${minutes}m ${secs}s`;
+                        }
+                        return `${Math.floor(seconds)}s`;
+                    },
+                    formatContactParams(params) {
+                        if (!params || typeof params !== 'object') {
+                            return '—';
+                        }
+                        const entries = Object.entries(params).map(([key, value]) => `${key}=${value}`);
+                        return entries.length ? entries.join(', ') : '—';
+                    },
+                };
+            });
+        });
+    </script>
+    {% endblock %}

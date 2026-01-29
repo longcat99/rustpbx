@@ -1,0 +1,624 @@
+{% extends "console/layout.html" %}
+{% set has_model = model is defined and model is not none %}
+{% set mode_text = '"edit"' if has_model else '"create"' %}
+{% set model_data = model if has_model else {} %}
+{% block title %}{{ model_data.display_name | default(model_data.name | default('New SIP trunk')) }} · {{ site_name |
+default('RustPBX') }}{% endblock %}
+{% block content %}
+{% set base_url = base_path | default('/console') %}
+<div class="p-6" x-data='sipTrunkDetailPage({
+        basePath: {{ base_url | tojson }},
+        mode: {{ mode_text }},
+        model: {{ model_data | tojson }},
+        filters: {{ filters | default({}) | tojson }},
+        tenants: {{ tenants | default([]) | tojson }},
+        createUrl: {{ create_url | default(null) | tojson }},
+        updateUrl: {{ update_url | default(null) | tojson }}
+    })' x-init="init()">
+    <div class="mx-auto max-w-5xl space-y-6">
+        <header class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div class="space-y-3">
+                <a :href="listUrl"
+                    class="inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-700">
+                    <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 5l-4 5 4 5" />
+                    </svg>
+                    Back to SIP trunks
+                </a>
+                <div>
+                    <h1 class="text-2xl font-semibold text-slate-900" x-text="pageTitle"></h1>
+                    <p class="mt-2 text-sm text-slate-500"
+                        x-text="mode === 'create' ? 'Register a carrier trunk, configure authentication, limits, and optional billing template.' : 'Update carrier credentials, routing, limits, and billing linkage for this trunk.'">
+                    </p>
+                </div>
+            </div>
+            <div class="rounded-xl bg-white p-5 text-sm text-slate-600 shadow-sm ring-1 ring-black/5"
+                x-show="mode === 'edit'" x-cloak>
+                <div class="flex items-center justify-between">
+                    <div class="font-semibold text-slate-900">Trunk summary</div>
+                    <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                        :class="statusBadgeClasses(form.status)">
+                        <span class="h-1.5 w-1.5 rounded-full" :class="statusDotClasses(form.status)"></span>
+                        <span x-text="statusBadgeLabel(form.status)"></span>
+                    </span>
+                </div>
+                <dl class="mt-4 space-y-3 text-xs text-slate-500">
+                    <div class="flex items-center justify-between gap-6">
+                        <dt class="uppercase tracking-wide">Trunk</dt>
+                        <dd class="text-sm text-slate-700" x-text="form.display_name || form.name || '—'"></dd>
+                    </div>
+                    <div class="flex items-center justify-between gap-6">
+                        <dt class="uppercase tracking-wide">Carrier</dt>
+                        <dd class="text-sm text-slate-700" x-text="form.carrier || '—'"></dd>
+                    </div>
+
+                    <div class="flex items-center justify-between gap-6">
+                        <dt class="uppercase tracking-wide">Updated</dt>
+                        <dd class="text-sm text-slate-700" x-text="formatDate(model?.updated_at)"></dd>
+                    </div>
+                </dl>
+            </div>
+        </header>
+
+        <template x-if="success">
+            <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
+                x-text="success"></div>
+        </template>
+        <template x-if="error">
+            <div class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700" x-text="error">
+            </div>
+        </template>
+
+        <form class="space-y-6" @submit.prevent="submit">
+            <div class="rounded-xl bg-white p-3 shadow-sm ring-1 ring-black/5">
+                <nav class="inline-flex w-full flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1 text-xs font-semibold text-slate-600"
+                    role="tablist" aria-label="SIP trunk configuration tabs">
+                    <button type="button" class="flex-1 rounded-md px-4 py-2 text-left transition sm:flex-none"
+                        :class="activeTab === 'general' ? 'bg-white text-sky-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+                        :aria-selected="activeTab === 'general'" aria-controls="sip-trunk-tab-general"
+                        @click="activeTab = 'general'">
+                        <div class="flex items-center gap-2">
+                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="1.8">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l9-9 9 9" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 10.5V21h15V10.5" />
+                            </svg>
+                            <div>
+                                <span class="text-sm">General</span>
+                                <span class="block text-[11px] font-normal text-slate-400">Identity, status,
+                                    limits</span>
+                            </div>
+                        </div>
+                    </button>
+                    <button type="button" class="flex-1 rounded-md px-4 py-2 text-left transition sm:flex-none"
+                        :class="activeTab === 'access' ? 'bg-white text-sky-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+                        :aria-selected="activeTab === 'access'" aria-controls="sip-trunk-tab-access"
+                        @click="activeTab = 'access'">
+                        <div class="flex items-center gap-2">
+                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="1.8">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 3l7 5v8l-7 5-7-5V8z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 12l7-4" />
+                            </svg>
+                            <div>
+                                <span class="text-sm">Access</span>
+                                <span class="block text-[11px] font-normal text-slate-400">Credentials, routing,
+                                    ACLs</span>
+                            </div>
+                        </div>
+                    </button>
+                </nav>
+            </div>
+
+            <div class="space-y-6" x-show="activeTab === 'general'" x-transition.opacity x-cloak
+                id="sip-trunk-tab-general" role="tabpanel" tabindex="0">
+                <section class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+                    <h2 class="text-sm font-semibold text-slate-900">General</h2>
+                    <div class="mt-4 grid gap-4 md:grid-cols-2">
+                        <label class="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                            Trunk name
+                            <input type="text" x-model.trim="form.name" maxlength="120" required
+                                class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                placeholder="sip-hk-primary">
+                            <span class="text-xs font-normal text-slate-400">Unique identifier used in routing
+                                rules.</span>
+                        </label>
+                        <label class="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                            Display name
+                            <input type="text" x-model.trim="form.display_name" maxlength="160"
+                                class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                placeholder="Hong Kong primary trunk">
+                        </label>
+                        <label class="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                            Carrier
+                            <input type="text" x-model.trim="form.carrier" maxlength="160"
+                                class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                placeholder="Carrier name">
+                        </label>
+                        <label class="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                            Status
+                            <select x-model="form.status"
+                                class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200">
+                                <template x-for="option in statusOptions" :key="option.value">
+                                    <option :value="option.value" x-text="option.label"></option>
+                                </template>
+                            </select>
+                        </label>
+                        <label class="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                            Direction
+                            <select x-model="form.direction"
+                                class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200">
+                                <template x-for="option in directionOptions" :key="option.value">
+                                    <option :value="option.value" x-text="option.label"></option>
+                                </template>
+                            </select>
+                        </label>
+                        <label class="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                            SIP transport
+                            <select x-model="form.sip_transport"
+                                class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200">
+                                <template x-for="option in transportOptions" :key="option.value">
+                                    <option :value="option.value" x-text="option.label"></option>
+                                </template>
+                            </select>
+                        </label>
+                        <label class="md:col-span-2 flex flex-col gap-2 text-sm font-medium text-slate-700">
+                            SIP server / realm
+                            <input type="text" x-model.trim="form.sip_server" maxlength="160"
+                                class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                placeholder="sip:provider.rustpbx.com">
+                        </label>
+                        <label class="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                            Outbound proxy
+                            <input type="text" x-model.trim="form.outbound_proxy" maxlength="160"
+                                class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                placeholder="proxy.rustpbx.com">
+                        </label>
+                        <div class="flex flex-col gap-2">
+                            <span class="text-sm font-medium text-slate-700">Active</span>
+                            <button type="button" @click="toggleActive()"
+                                class="inline-flex items-center gap-2 rounded-lg px-3 py-1 text-xs font-semibold ring-2 transition"
+                                :class="form.is_active ? 'bg-emerald-50 text-emerald-600 ring-emerald-200' : 'bg-slate-100 text-slate-500 ring-slate-200'">
+                                <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                                    stroke-width="1.6">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 10l4 4 6-8"
+                                        x-show="form.is_active"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 6l8 8M6 14l8-8"
+                                        x-show="!form.is_active"></path>
+                                </svg>
+                                <span x-text="form.is_active ? 'Enabled' : 'Disabled'"></span>
+                            </button>
+                        </div>
+                    </div>
+                    <label class="mt-4 flex flex-col gap-2 text-sm font-medium text-slate-700">
+                        Description
+                        <textarea rows="3" x-model.trim="form.description"
+                            class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                            placeholder="Internal notes about provisioning or escalation."></textarea>
+                    </label>
+                </section>
+
+                <section class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+                    <h2 class="text-sm font-semibold text-slate-900">Capacity limits</h2>
+                    <div class="mt-4 grid gap-4 md:grid-cols-3">
+                        <label class="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                            Max CPS
+                            <input type="number" min="0" step="1" x-model="form.max_cps"
+                                class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                placeholder="e.g. 30">
+                        </label>
+                        <label class="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                            Max concurrent calls
+                            <input type="number" min="0" step="1" x-model="form.max_concurrent"
+                                class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                placeholder="e.g. 120">
+                        </label>
+                        <label class="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                            Max call duration (sec)
+                            <input type="number" min="0" step="1" x-model="form.max_call_duration"
+                                class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                placeholder="e.g. 3600">
+                        </label>
+                    </div>
+                </section>
+            </div>
+
+            <div class="space-y-6" x-show="activeTab === 'access'" x-transition.opacity x-cloak
+                id="sip-trunk-tab-access" role="tabpanel" tabindex="0">
+                <section class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+                    <h2 class="text-sm font-semibold text-slate-900">Authentication & routing</h2>
+                    <div class="mt-4 grid gap-4 md:grid-cols-2">
+                        <label class="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                            Auth username
+                            <input type="text" x-model.trim="form.auth_username" maxlength="160"
+                                class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                placeholder="Provided by carrier">
+                        </label>
+                        <label class="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                            Auth password
+                            <input type="text" x-model.trim="form.auth_password" maxlength="160"
+                                class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                placeholder="Encrypted storage recommended">
+                        </label>
+                    </div>
+                </section>
+
+                <section class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+                    <div class="flex flex-col gap-1">
+                        <h2 class="text-sm font-semibold text-slate-900">Inbound identity filters</h2>
+                        <p class="text-sm text-slate-500">Drop inbound calls whose SIP From/To users don't match these
+                            prefixes. Plain text is treated as a prefix; include regex tokens for advanced rules.</p>
+                    </div>
+                    <div class="mt-4 grid gap-4 md:grid-cols-2">
+                        <label class="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                            From user prefix / regex
+                            <input type="text" x-model.trim="form.incoming_from_user_prefix"
+                                class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                placeholder="^\\+8525">
+                            <span class="text-xs font-normal text-slate-500">Example: <code
+                                    class="text-[11px]">^\\+8525</code>
+                                ensures caller IDs start with +8525.</span>
+                        </label>
+                        <label class="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                            To user prefix / regex
+                            <input type="text" x-model.trim="form.incoming_to_user_prefix"
+                                class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                placeholder="^\\d{10}$">
+                            <span class="text-xs font-normal text-slate-500">Leave blank to accept all
+                                destinations.</span>
+                        </label>
+                    </div>
+                </section>
+
+                <section class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+                    <h2 class="text-sm font-semibold text-slate-900">Access lists</h2>
+                    <div class="mt-4 grid gap-4 md:grid-cols-2">
+                        <label class="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                            Allowed IPs (one per line)
+                            <textarea rows="6" x-model="form.allowed_ips"
+                                class="font-mono rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                placeholder="203.0.113.10/32&#10;198.51.100.5/32"></textarea>
+                        </label>
+                        <label class="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                            DID numbers (one per line)
+                            <textarea rows="6" x-model="form.did_numbers"
+                                class="font-mono rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                placeholder="+85258001234&#10;+85258004567"></textarea>
+                        </label>
+                    </div>
+                </section>
+            </div>
+
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p class="text-xs text-slate-400">Changes are saved via the API without page reloads.</p>
+                <div class="flex items-center gap-3">
+                    <a :href="listUrl"
+                        class="inline-flex items-center justify-center rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100">
+                        Cancel
+                    </a>
+                    <button type="submit"
+                        class="inline-flex items-center justify-center gap-2 rounded-lg bg-sky-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2"
+                        :disabled="saving">
+                        <svg class="h-4 w-4 animate-spin" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                            stroke-width="1.6" x-show="saving">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M4 10a6 6 0 0 1 6-6m0-3v3m6 6a6 6 0 0 1-6 6m0 3v-3m9-6h-3M1 10h3m10.95 4.95-2.12-2.12M4.05 5.05l2.12 2.12m0 5.66-2.12 2.12m9.9-9.9 2.12-2.12" />
+                        </svg>
+                        <span x-text="mode === 'edit' ? 'Save changes' : 'Create trunk'"></span>
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('sipTrunkDetailPage', (options) => ({
+            basePath: options.basePath || '/console',
+            mode: options.mode || 'create',
+            model: options.model || null,
+            tenantsRaw: Array.isArray(options.tenants) ? options.tenants : [],
+            filters: options.filters || {},
+            listUrl: `${options.basePath || '/console'}/sip-trunk`,
+            createUrl: options.createUrl || null,
+            updateUrl: options.updateUrl || null,
+            statusOptions: [],
+            directionOptions: [],
+            transportOptions: [
+                { value: 'udp', label: 'UDP' },
+                { value: 'tcp', label: 'TCP' },
+                { value: 'tls', label: 'TLS' },
+            ],
+            form: {
+                name: '',
+                display_name: '',
+                carrier: '',
+                description: '',
+                status: 'healthy',
+                direction: 'bidirectional',
+                sip_server: '',
+                sip_transport: 'udp',
+                outbound_proxy: '',
+                auth_username: '',
+                auth_password: '',
+                max_cps: '',
+                max_concurrent: '',
+                max_call_duration: '',
+                allowed_ips: '',
+                did_numbers: '',
+                billing_snapshot: '',
+                analytics: '',
+                tags: '',
+                incoming_from_user_prefix: '',
+                incoming_to_user_prefix: '',
+                metadata: '',
+                is_active: true,
+            },
+            success: null,
+            error: null,
+            saving: false,
+            activeTab: 'general',
+            init() {
+                this.loadOptions();
+                if (this.model) {
+                    this.$nextTick(() => {
+                        this.populateFromModel();
+                    });
+                }
+            },
+            loadOptions() {
+                const statuses = Array.isArray(this.filters.statuses) ? this.filters.statuses : ['healthy', 'warning', 'standby', 'offline'];
+                const directions = Array.isArray(this.filters.directions) ? this.filters.directions : ['inbound', 'outbound', 'bidirectional'];
+
+                this.statusOptions = statuses.map((value) => ({
+                    value: String(value).toLowerCase(),
+                    label: this.statusBadgeLabel(value),
+                }));
+
+                this.directionOptions = directions.map((value) => ({
+                    value: String(value).toLowerCase(),
+                    label: this.directionLabel(value),
+                }));
+            },
+            populateFromModel() {
+                const model = this.model || {};
+                this.form.name = model.name || '';
+                this.form.display_name = model.display_name || '';
+                this.form.carrier = model.carrier || '';
+                this.form.description = model.description || '';
+                // Reset to empty first to force reactivity (needed when value equals default)
+                this.form.status = '';
+                this.form.direction = '';
+                this.form.sip_transport = '';
+                this.form.status = (model.status || 'healthy').toLowerCase();
+                this.form.direction = (model.direction || 'bidirectional').toLowerCase();
+                this.form.sip_transport = (model.sip_transport || 'udp').toLowerCase();
+                this.form.sip_server = model.sip_server || '';
+                this.form.outbound_proxy = model.outbound_proxy || '';
+                this.form.auth_username = model.auth_username || '';
+                this.form.auth_password = model.auth_password || '';
+                this.form.max_cps = model.max_cps != null ? String(model.max_cps) : '';
+                this.form.max_concurrent = model.max_concurrent != null ? String(model.max_concurrent) : '';
+                this.form.max_call_duration = model.max_call_duration != null ? String(model.max_call_duration) : '';
+                this.form.allowed_ips = this.formatMultilineList(model.allowed_ips, ['cidr', 'ip', 'host', 'value']);
+                this.form.did_numbers = this.formatMultilineList(model.did_numbers, ['number', 'did', 'value']);
+                this.form.billing_snapshot = this.formatJson(model.billing_snapshot);
+                this.form.analytics = this.formatJson(model.analytics);
+                this.form.tags = this.formatJson(model.tags);
+                this.form.incoming_from_user_prefix = model.incoming_from_user_prefix || '';
+                this.form.incoming_to_user_prefix = model.incoming_to_user_prefix || '';
+                this.form.metadata = this.formatJson(model.metadata);
+                this.form.is_active = model.is_active !== false;
+            },
+            get pageTitle() {
+                if (this.mode === 'edit') {
+                    return `Edit ${this.form.display_name || this.form.name || 'SIP trunk'}`;
+                }
+                return 'Create SIP trunk';
+            },
+            statusBadgeLabel(value) {
+                const normalized = String(value || '').toLowerCase();
+                if (!normalized) return 'Unknown';
+                return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+            },
+            statusBadgeClasses(value) {
+                const normalized = String(value || '').toLowerCase();
+                if (normalized === 'healthy') return 'bg-emerald-50 text-emerald-600 ring-emerald-200';
+                if (normalized === 'warning') return 'bg-amber-50 text-amber-600 ring-amber-200';
+                if (normalized === 'offline') return 'bg-rose-50 text-rose-600 ring-rose-200';
+                if (normalized === 'standby') return 'bg-sky-50 text-sky-600 ring-sky-200';
+                return 'bg-slate-100 text-slate-600 ring-slate-200';
+            },
+            statusDotClasses(value) {
+                const normalized = String(value || '').toLowerCase();
+                if (normalized === 'healthy') return 'bg-emerald-400';
+                if (normalized === 'warning') return 'bg-amber-400';
+                if (normalized === 'offline') return 'bg-rose-400';
+                if (normalized === 'standby') return 'bg-sky-400';
+                return 'bg-slate-400';
+            },
+            directionLabel(value) {
+                const normalized = String(value || '').toLowerCase();
+                if (normalized === 'inbound') return 'Inbound';
+                if (normalized === 'outbound') return 'Outbound';
+                if (normalized === 'bidirectional') return 'Bi-directional';
+                return value || 'Unknown';
+            },
+            toggleActive() {
+                this.form.is_active = !this.form.is_active;
+            },
+            formatDate(value) {
+                if (!value) return '—';
+                const date = new Date(value);
+                if (Number.isNaN(date.getTime())) return value;
+                return date.toLocaleString();
+            },
+            formatMultilineList(value, preferredKeys = []) {
+                const keys = Array.isArray(preferredKeys) ? preferredKeys : [];
+                const extractFromObject = (obj) => {
+                    if (!obj || typeof obj !== 'object') {
+                        return '';
+                    }
+                    for (const key of keys) {
+                        const candidate = obj[key];
+                        if (typeof candidate === 'string' && candidate.trim()) {
+                            return candidate.trim();
+                        }
+                    }
+                    for (const value of Object.values(obj)) {
+                        if (typeof value === 'string' && value.trim()) {
+                            return value.trim();
+                        }
+                    }
+                    return '';
+                };
+                const collect = (input) => {
+                    if (input === null || input === undefined) {
+                        return [];
+                    }
+                    if (Array.isArray(input)) {
+                        const results = [];
+                        input.forEach((item) => {
+                            collect(item).forEach((entry) => {
+                                if (entry) {
+                                    results.push(entry);
+                                }
+                            });
+                        });
+                        return results;
+                    }
+                    if (typeof input === 'string') {
+                        const trimmed = input.trim();
+                        if (!trimmed) {
+                            return [];
+                        }
+                        try {
+                            const parsed = JSON.parse(trimmed);
+                            return collect(parsed);
+                        } catch (err) {
+                            return trimmed
+                                .split(/\r?\n/)
+                                .map((line) => line.trim())
+                                .filter((line) => line.length > 0);
+                        }
+                    }
+                    if (typeof input === 'object') {
+                        const extracted = extractFromObject(input);
+                        return extracted ? [extracted] : [];
+                    }
+                    const asString = String(input).trim();
+                    return asString ? [asString] : [];
+                };
+                const entries = collect(value);
+                return entries.join('\n');
+            },
+            formatJson(value) {
+                if (!value || (typeof value === 'string' && !value.trim())) {
+                    return '';
+                }
+                try {
+                    if (typeof value === 'string') {
+                        const parsed = JSON.parse(value);
+                        return JSON.stringify(parsed, null, 2);
+                    }
+                    return JSON.stringify(value, null, 2);
+                } catch (err) {
+                    return typeof value === 'string' ? value : JSON.stringify(value);
+                }
+            },
+            submitUrl() {
+                if (this.mode === 'edit') {
+                    if (this.updateUrl) {
+                        return this.updateUrl;
+                    }
+                    if (this.model?.id) {
+                        return `${this.basePath}/sip-trunk/${this.model.id}`;
+                    }
+                } else if (this.createUrl) {
+                    return this.createUrl;
+                }
+                return `${this.basePath}/sip-trunk`;
+            },
+            submitMethod() {
+                return this.mode === 'edit' ? 'PATCH' : 'PUT';
+            },
+            buildPayload() {
+                const params = new URLSearchParams();
+                params.set('name', this.form.name.trim());
+                params.set('display_name', this.form.display_name.trim());
+                params.set('carrier', this.form.carrier.trim());
+                params.set('description', this.form.description.trim());
+                params.set('status', this.form.status.trim());
+                params.set('direction', this.form.direction.trim());
+                params.set('sip_transport', this.form.sip_transport.trim());
+
+                if (this.form.sip_server.trim()) params.set('sip_server', this.form.sip_server.trim());
+                if (this.form.outbound_proxy.trim()) params.set('outbound_proxy', this.form.outbound_proxy.trim());
+                if (this.form.auth_username.trim()) params.set('auth_username', this.form.auth_username.trim());
+                if (this.form.auth_password.trim()) params.set('auth_password', this.form.auth_password.trim());
+
+                const numericFields = [
+                    ['max_cps', this.form.max_cps],
+                    ['max_concurrent', this.form.max_concurrent],
+                    ['max_call_duration', this.form.max_call_duration],
+                ];
+                numericFields.forEach(([key, value]) => {
+                    if (value !== '' && value !== null && value !== undefined) {
+                        const num = Number(value);
+                        if (!Number.isNaN(num)) {
+                            params.set(key, String(Math.max(0, Math.round(num))));
+                        }
+                    }
+                });
+
+                params.set('allowed_ips', this.form.allowed_ips.trim());
+                params.set('did_numbers', this.form.did_numbers.trim());
+                params.set('billing_snapshot', this.form.billing_snapshot.trim());
+                params.set('analytics', this.form.analytics.trim());
+                params.set('tags', this.form.tags.trim());
+                params.set('incoming_from_user_prefix', this.form.incoming_from_user_prefix.trim());
+                params.set('incoming_to_user_prefix', this.form.incoming_to_user_prefix.trim());
+                params.set('metadata', this.form.metadata.trim());
+                params.set('is_active', this.form.is_active ? 'true' : 'false');
+
+                return params;
+            },
+            async submit() {
+                if (!this.form.name.trim()) {
+                    this.error = 'Trunk name is required.';
+                    return;
+                }
+                this.saving = true;
+                this.error = null;
+                this.success = null;
+                try {
+                    const response = await fetch(this.submitUrl(), {
+                        method: this.submitMethod(),
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+                        },
+                        body: this.buildPayload().toString(),
+                    });
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok) {
+                        throw new Error(data?.message || 'Failed to save SIP trunk');
+                    }
+                    if (this.mode === 'create' && data?.id) {
+                        window.location.href = `${this.basePath}/sip-trunk/${data.id}`;
+                        return;
+                    }
+                    this.success = 'Changes saved successfully.';
+                } catch (err) {
+                    console.error(err);
+                    this.error = err?.message || 'Failed to save SIP trunk';
+                } finally {
+                    this.saving = false;
+                }
+            },
+        }));
+    });
+</script>
+
+{% endblock %}

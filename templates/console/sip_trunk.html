@@ -1,0 +1,883 @@
+{% extends "console/layout.html" %}
+{% block title %}SIP Trunks · {{ site_name | default('RustPBX') }}{% endblock %}
+{% block content %}
+{% set base_url = base_path | default('/console') %}
+<div class="p-6" x-data='sipTrunkPage({
+        basePath: {{ base_url | tojson }},
+        filters: {{ filters | default({}) | tojson }},
+        createUrl: {{ create_url | tojson }}
+    })' x-init="init()">
+    <div class="mx-auto max-w-7xl space-y-6">
+        <header class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div class="space-y-1">
+                <p class="text-xs font-semibold uppercase tracking-wide text-sky-600">Carrier connectivity</p>
+                <h1 class="text-2xl font-semibold text-slate-900">SIP trunks</h1>
+                <p class="text-sm text-slate-500">Review carrier endpoints, capacity limits, and billing policy in one
+                    place.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+                <button type="button"
+                    class="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-sky-300 hover:text-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-200 focus:ring-offset-2"
+                    :class="reloading ? 'cursor-wait border-slate-200 text-slate-400 hover:border-slate-200 hover:text-slate-400' : ''"
+                    :disabled="reloading" @click="confirmReload()">
+                    <template x-if="!reloading">
+                        <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M4.5 10a5.5 5.5 0 0 1 9.35-3.89l.65.65M15.5 10a5.5 5.5 0 0 1-9.35 3.89l-.65-.65M10 4.5V2m0 18v-2" />
+                        </svg>
+                    </template>
+                    <template x-if="reloading">
+                        <svg class="h-4 w-4 animate-spin text-slate-400" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="1.8">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M12 3v3m6.364 1.636-2.121 2.121M21 12h-3m-1.636 6.364-2.121-2.121M12 21v-3m-6.364-1.636 2.121-2.121M3 12h3m1.636-6.364 2.121 2.121" />
+                        </svg>
+                    </template>
+                    Reload trunks
+                </button>
+
+                <a :href="createUrl"
+                    class="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2">
+                    <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10 4v12m6-6H4" />
+                    </svg>
+                    New SIP trunk
+                </a>
+            </div>
+        </header>
+
+        <template x-if="flash">
+            <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
+                x-text="flash"></div>
+        </template>
+        <template x-if="error">
+            <div class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600" x-text="error">
+            </div>
+        </template>
+
+        <template x-if="lastReload">
+            <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <span class="font-semibold text-slate-800">Latest reload</span>
+                        <span class="ml-2" x-text="buildReloadSummary(lastReload)"></span>
+                    </div>
+                    <div class="text-xs text-slate-500">
+                        <span>Finished </span>
+                        <span x-text="formatDate(lastReload.finished_at)"></span>
+                    </div>
+                </div>
+                <div class="mt-2 text-xs text-slate-500">
+                    <span>Sources:</span>
+                    <span> embedded
+                        <span class="font-semibold text-slate-700" x-text="Number(lastReload.config_count) || 0"></span>
+                    </span>,
+                    <span> include files
+                        <span class="font-semibold text-slate-700" x-text="Number(lastReload.file_count) || 0"></span>
+                    </span>
+                    <template x-if="lastReload.generated">
+                        <span>, generated file
+                            <span class="font-semibold text-slate-700"
+                                x-text="Number(lastReload.generated.entries) || 0"></span>
+                        </span>
+                    </template>
+                </div>
+                <template x-if="lastReload.generated && (lastReload.generated.path || lastReload.generated.backup)">
+                    <div class="mt-2 text-xs text-slate-500">
+                        <template x-if="lastReload.generated.path">
+                            <div>
+                                <span class="font-semibold text-slate-600">Generated file</span>
+                                <span class="ml-1 break-all" x-text="lastReload.generated.path"></span>
+                            </div>
+                        </template>
+                        <template x-if="lastReload.generated.backup">
+                            <div class="mt-1">
+                                <span class="font-semibold text-slate-600">Previous backup</span>
+                                <span class="ml-1 break-all" x-text="lastReload.generated.backup"></span>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+                <template x-if="lastReload.patterns && lastReload.patterns.length">
+                    <div class="mt-2 text-xs text-slate-500">
+                        <div class="font-semibold text-slate-600">Include patterns</div>
+                        <ul class="mt-1 list-disc space-y-0.5 pl-5">
+                            <template x-for="pattern in lastReload.patterns" :key="pattern">
+                                <li class="break-all" x-text="pattern"></li>
+                            </template>
+                        </ul>
+                    </div>
+                </template>
+                <template x-if="lastReload.files && lastReload.files.length">
+                    <div class="mt-2 text-xs text-slate-500">
+                        <div class="font-semibold text-slate-600">Include files</div>
+                        <ul class="mt-1 list-disc space-y-0.5 pl-5">
+                            <template x-for="file in lastReload.files" :key="file">
+                                <li class="break-all" x-text="file"></li>
+                            </template>
+                        </ul>
+                    </div>
+                </template>
+            </div>
+        </template>
+
+        <section class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+            <div class="flex flex-col gap-4">
+                <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <div
+                            class="flex gap-1 rounded-lg border border-slate-200 p-1 text-xs font-medium text-slate-600">
+                            <button type="button" class="rounded-md px-3 py-1 transition"
+                                :class="directionFilter === 'all' ? 'bg-sky-100 text-sky-700' : 'hover:bg-slate-100'"
+                                @click="setDirection('all')">All</button>
+                            <button type="button" class="rounded-md px-3 py-1 transition"
+                                :class="directionFilter === 'inbound' ? 'bg-sky-100 text-sky-700' : 'hover:bg-slate-100'"
+                                @click="setDirection('inbound')">Inbound</button>
+                            <button type="button" class="rounded-md px-3 py-1 transition"
+                                :class="directionFilter === 'outbound' ? 'bg-sky-100 text-sky-700' : 'hover:bg-slate-100'"
+                                @click="setDirection('outbound')">Outbound</button>
+                            <button type="button" class="rounded-md px-3 py-1 transition"
+                                :class="directionFilter === 'bidirectional' ? 'bg-sky-100 text-sky-700' : 'hover:bg-slate-100'"
+                                @click="setDirection('bidirectional')">Bi-directional</button>
+                        </div>
+                    </div>
+                    <div
+                        class="flex w-full flex-col gap-3 lg:w-auto lg:flex-row lg:items-center lg:justify-end lg:gap-3">
+                        <label class="relative flex-1 lg:min-w-[18rem]" aria-label="Search SIP trunks">
+                            <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                                viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="m17.5 17.5-3.65-3.65m0 0a5.5 5.5 0 1 0-7.778-7.778 5.5 5.5 0 0 0 7.778 7.778Z" />
+                            </svg>
+                            <input type="search" x-model.trim="keyword" @input.debounce.400ms="applyFilters()"
+                                class="w-full rounded-lg border border-slate-200 px-3 py-2 pl-9 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                placeholder="Name, carrier, DID…">
+                        </label>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <select aria-label="Add filter"
+                                class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-sky-300 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                @change="addFilter($event)">
+                                <option value="">+ Add filter</option>
+                                <template x-for="option in filterOptions" :key="option.key">
+                                    <option :value="option.key" :disabled="activeFilters.includes(option.key)"
+                                        x-text="option.label"></option>
+                                </template>
+                            </select>
+                            <select aria-label="Sort SIP trunks" x-model="sortOrder" @change="applySorting()"
+                                class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-sky-300 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200">
+                                <template x-for="option in sortOptions" :key="option.value">
+                                    <option :value="option.value" x-text="option.label"></option>
+                                </template>
+                            </select>
+                            <button type="button"
+                                class="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-sky-300 hover:text-sky-700"
+                                @click="resetFilters()">
+                                <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                                    stroke-width="1.6">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M10 3v14m-7-7h14" />
+                                </svg>
+                                Clear all
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap gap-3" x-show="activeFilters.length" x-cloak>
+                    <template x-for="filter in activeFilters" :key="filter">
+                        <div
+                            class="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 sm:w-auto sm:min-w-[18rem]">
+                            <div class="flex items-start justify-between gap-3">
+                                <div>
+                                    <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-500"
+                                        x-text="filterOptionLabel(filter)"></div>
+                                    <div class="text-sm text-slate-700" x-text="formatFilterValue(filter)"></div>
+                                </div>
+                                <button type="button"
+                                    class="rounded-full p-1 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                                    @click="removeFilter(filter)">
+                                    <span class="sr-only">Remove filter</span>
+                                    <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                                        stroke-width="1.6">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 6l8 8M6 14l8-8" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="mt-3 space-y-2">
+                                <template x-if="filter === 'status'">
+                                    <select x-model="statusFilter" @change="applyFilters()"
+                                        class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200">
+                                        <template x-for="option in statusOptions" :key="option.value">
+                                            <option :value="option.value" x-text="option.label"></option>
+                                        </template>
+                                    </select>
+                                </template>
+                                <!-- Direction filter removed from active filters -->
+
+                                <template x-if="filter === 'transport'">
+                                    <select x-model="transportFilter" @change="applyFilters()"
+                                        class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200">
+                                        <template x-for="option in transportOptions" :key="option.value">
+                                            <option :value="option.value" x-text="option.label"></option>
+                                        </template>
+                                    </select>
+                                </template>
+
+                                <template x-if="filter === 'active'">
+                                    <label class="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
+                                        <input type="checkbox"
+                                            class="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-400"
+                                            x-model="activeOnly" @change="applyFilters()">
+                                        <span>Show active trunks only</span>
+                                    </label>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </section>
+
+        <section class="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-black/5">
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-slate-200 text-left text-sm">
+                    <thead class="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        <tr>
+                            <th scope="col" class="px-4 py-2">Trunk</th>
+                            <th scope="col" class="px-4 py-2">Carrier</th>
+                            <th scope="col" class="px-4 py-2">Status</th>
+                            <th scope="col" class="px-4 py-2">Direction</th>
+                            <th scope="col" class="px-4 py-2">Capacity</th>
+                            <th scope="col" class="px-4 py-2">Updated</th>
+                            <th scope="col" class="px-4 py-2">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 bg-white text-slate-600">
+                        <template x-if="loading">
+                            <tr>
+                                <td colspan="7" class="px-4 py-6 text-center text-sm text-slate-500">
+                                    <div class="inline-flex items-center gap-2">
+                                        <svg class="h-4 w-4 animate-spin text-slate-400" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                d="M12 3v3m6.364 1.636-2.121 2.121M21 12h-3m-1.636 6.364-2.121-2.121M12 21v-3m-6.364-1.636 2.121-2.121M3 12h3m1.636-6.364 2.121 2.121" />
+                                        </svg>
+                                        Loading trunks…
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
+                        <template x-if="!loading && !trunks.length">
+                            <tr>
+                                <td colspan="7" class="px-4 py-6 text-center text-sm text-slate-500">
+                                    No trunks found. Create one to get started.
+                                </td>
+                            </tr>
+                        </template>
+                        <template x-for="trunk in trunks" :key="trunk.id">
+                            <tr class="hover:bg-slate-50">
+                                <td class="whitespace-nowrap px-4 py-2">
+                                    <a :href="detailUrl(trunk.id)"
+                                        class="font-semibold text-slate-900 hover:text-sky-600 hover:underline"
+                                        x-text="trunk.display_name || trunk.name">
+                                    </a>
+                                    <div class="text-xs text-slate-400">#<span x-text="trunk.name"></span></div>
+                                    <template x-if="trunk.is_active === false">
+                                        <span
+                                            class="mt-1 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">Disabled</span>
+                                    </template>
+                                </td>
+                                <td class="whitespace-nowrap px-4 py-2">
+                                    <div x-text="trunk.carrier || '—'"></div>
+                                    <template x-if="trunk.sip_server">
+                                        <div class="text-xs text-slate-400" x-text="trunk.sip_server"></div>
+                                    </template>
+                                </td>
+                                <td class="whitespace-nowrap px-4 py-2">
+                                    <span
+                                        class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                                        :class="statusBadgeClasses(trunk.status)">
+                                        <span class="h-1.5 w-1.5 rounded-full"
+                                            :class="statusDotClasses(trunk.status)"></span>
+                                        <span x-text="statusBadgeLabel(trunk.status)"></span>
+                                    </span>
+                                </td>
+                                <td class="whitespace-nowrap px-4 py-2">
+                                    <span x-text="directionLabel(trunk.direction)"></span>
+                                </td>
+                                <td class="whitespace-nowrap px-4 py-2">
+                                    <span x-text="capacitySummary(trunk)"></span>
+                                </td>
+                                <td class="whitespace-nowrap px-4 py-2 text-slate-500"
+                                    x-text="formatDate(trunk.updated_at)"></td>
+                                <td class="whitespace-nowrap px-4 py-2">
+                                    <div class="flex items-center gap-2">
+                                        <a :href="detailUrl(trunk.id)"
+                                            class="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-sky-300 hover:text-sky-700">
+                                            View
+                                        </a>
+                                        <button type="button"
+                                            class="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-3 py-1 text-xs font-semibold transition"
+                                            :class="processingDelete === trunk.id ? 'text-rose-300 cursor-not-allowed' : 'text-rose-600 hover:bg-rose-50'"
+                                            :disabled="processingDelete === trunk.id" @click="confirmDelete(trunk)">
+                                            Delete
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+
+            <template x-if="pagination">
+                <div
+                    class="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-xs text-slate-500">
+                    <div>
+                        Showing <span class="font-semibold" x-text="pagination.showing_from"></span>
+                        – <span class="font-semibold" x-text="pagination.showing_to"></span>
+                        of <span class="font-semibold" x-text="pagination.total_items"></span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button type="button"
+                            class="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 font-semibold transition"
+                            :class="pagination.has_prev ? 'text-slate-600 hover:border-sky-300 hover:text-sky-700' : 'cursor-not-allowed text-slate-300'"
+                            :disabled="!pagination.has_prev" @click="prevPage()">
+                            Prev
+                        </button>
+                        <div class="text-sm font-semibold text-slate-600">
+                            Page <span x-text="pagination.current_page"></span> / <span
+                                x-text="pagination.total_pages"></span>
+                        </div>
+                        <button type="button"
+                            class="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 font-semibold transition"
+                            :class="pagination.has_next ? 'text-slate-600 hover:border-sky-300 hover:text-sky-700' : 'cursor-not-allowed text-slate-300'"
+                            :disabled="!pagination.has_next" @click="nextPage()">
+                            Next
+                        </button>
+                    </div>
+                </div>
+            </template>
+        </section>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('sipTrunkPage', (options) => ({
+            basePath: options.basePath || '/console',
+            listEndpoint: `${options.basePath || '/console'}/sip-trunk`,
+            createUrl: options.createUrl || `${options.basePath || '/console'}/sip-trunk/new`,
+            amiEndpoint: options.amiEndpoint || '/ami/v1',
+            filtersRaw: options.filters || {},
+            keyword: '',
+            statusFilter: 'all',
+            directionFilter: 'all',
+            transportFilter: 'all',
+            templateFilter: 'all',
+            activeOnly: false,
+            statusOptions: [],
+            directionOptions: [],
+            transportOptions: [],
+            templateOptions: [],
+            templateMap: {},
+            trunks: [],
+            pagination: null,
+            loading: false,
+            error: null,
+            flash: null,
+            processingDelete: null,
+            reloading: false,
+            lastReload: null,
+            page: 1,
+            perPage: 20,
+            sortOrder: '',
+            sortOptions: [
+                { value: 'updated_at_desc', label: 'Updated · Newest first' },
+                { value: 'updated_at_asc', label: 'Updated · Oldest first' },
+                { value: 'name_asc', label: 'Name · A → Z' },
+                { value: 'name_desc', label: 'Name · Z → A' },
+                { value: 'carrier_asc', label: 'Carrier · A → Z' },
+                { value: 'carrier_desc', label: 'Carrier · Z → A' },
+                { value: 'status_asc', label: 'Status · A → Z' },
+                { value: 'status_desc', label: 'Status · Z → A' },
+            ],
+            filterOptions: [
+                { key: 'status', label: 'Status' },
+                { key: 'transport', label: 'Transport' },
+                { key: 'active', label: 'Active state' },
+            ],
+            activeFilters: [],
+            init() {
+                this.loadFilterOptions();
+                this.sortOrder = this.defaultSort();
+                this.syncActiveFilters();
+                this.fetchTrunks();
+            },
+            loadFilterOptions() {
+                const statuses = Array.isArray(this.filtersRaw.statuses) ? this.filtersRaw.statuses : [];
+                const directions = Array.isArray(this.filtersRaw.directions) ? this.filtersRaw.directions : [];
+                const transports = Array.isArray(this.filtersRaw.transports) ? this.filtersRaw.transports : [];
+
+                this.statusOptions = [{ value: 'all', label: 'Any status' }]
+                    .concat(statuses.map((value) => ({
+                        value: String(value).toLowerCase(),
+                        label: this.statusBadgeLabel(value),
+                    })));
+
+                this.directionOptions = [{ value: 'all', label: 'Any direction' }]
+                    .concat(directions.map((value) => ({
+                        value: String(value).toLowerCase(),
+                        label: this.directionLabel(value),
+                    })));
+
+                this.transportOptions = [{ value: 'all', label: 'Any transport' }]
+                    .concat(transports.map((value) => {
+                        const val = String(value).toLowerCase();
+                        return {
+                            value: val,
+                            label: val.toUpperCase(),
+                        };
+                    }));
+            },
+            buildParams() {
+                return {
+                    page: this.page,
+                    per_page: this.perPage,
+                    filters: {
+                        q: this.keyword.trim() || undefined,
+                        status: this.statusFilter !== 'all' ? this.statusFilter : undefined,
+                        direction: this.directionFilter !== 'all' ? this.directionFilter : undefined,
+                        transport: this.transportFilter !== 'all' ? this.transportFilter : undefined,
+                        only_active: this.activeOnly || undefined,
+                    },
+                    sort: this.sortOrder || undefined,
+                };
+            },
+            async fetchTrunks() {
+                this.loading = true;
+                this.error = null;
+                try {
+                    const response = await fetch(`${this.listEndpoint}`, {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(this.buildParams()),
+                    });
+                    const data = await response.json();
+                    if (!response.ok) {
+                        throw new Error(data?.message || 'Failed to load SIP trunks');
+                    }
+
+                    const items = Array.isArray(data?.items) ? data.items : [];
+
+                    const perPageRaw = Number(data?.per_page);
+                    const totalItemsRaw = Number(data?.total_items);
+                    const totalPagesRaw = Number(data?.total_pages);
+                    const currentPageRaw = Number(data?.page);
+
+                    const perPage = Number.isFinite(perPageRaw) && perPageRaw > 0 ? perPageRaw : this.perPage;
+                    const totalItems = Number.isFinite(totalItemsRaw) && totalItemsRaw >= 0 ? totalItemsRaw : items.length;
+                    const inferredTotalPages = Math.max(Math.ceil(totalItems / Math.max(perPage, 1)), 1);
+                    const totalPages = Number.isFinite(totalPagesRaw) && totalPagesRaw >= 1
+                        ? Math.max(Math.min(totalPagesRaw, inferredTotalPages || 1), 1)
+                        : inferredTotalPages;
+                    const currentPage = Number.isFinite(currentPageRaw) && currentPageRaw >= 1
+                        ? Math.min(currentPageRaw, totalPages)
+                        : Math.min(this.page || 1, totalPages);
+
+                    const hasPrevApi = typeof data?.has_prev === 'boolean' ? data.has_prev : null;
+                    const hasNextApi = typeof data?.has_next === 'boolean' ? data.has_next : null;
+                    const resultsCount = items.length;
+                    const showingFrom = resultsCount ? ((currentPage - 1) * perPage) + 1 : 0;
+                    const showingTo = resultsCount ? Math.min(showingFrom + resultsCount - 1, totalItems) : 0;
+                    const hasPrev = hasPrevApi !== null ? hasPrevApi : currentPage > 1;
+                    const hasNext = hasNextApi !== null ? hasNextApi : currentPage < totalPages;
+                    const prevPage = hasPrev ? Math.max(currentPage - 1, 1) : null;
+                    const nextPage = hasNext ? Math.min(currentPage + 1, totalPages) : null;
+
+                    this.trunks = items;
+                    this.pagination = {
+                        current_page: currentPage,
+                        per_page: perPage,
+                        total_items: totalItems,
+                        total_pages: totalPages,
+                        has_prev: hasPrev,
+                        has_next: hasNext,
+                        prev_page: prevPage,
+                        next_page: nextPage,
+                        showing_from: showingFrom,
+                        showing_to: showingTo,
+                    };
+                    if (data?.filters && typeof data.filters === 'object') {
+                        this.filtersRaw = data.filters;
+                        this.loadFilterOptions();
+                    }
+                    this.perPage = perPage;
+                    this.page = currentPage;
+                    this.flash = null;
+                    this.syncActiveFilters();
+                } catch (err) {
+                    console.error(err);
+                    this.error = err?.message || 'Unable to load SIP trunks';
+                    this.trunks = [];
+                    this.pagination = null;
+                } finally {
+                    this.loading = false;
+                }
+            },
+            applyFilters() {
+                this.page = 1;
+                this.syncActiveFilters();
+                this.fetchTrunks();
+            },
+            applySorting() {
+                this.page = 1;
+                this.fetchTrunks();
+            },
+            resetFilters() {
+                this.keyword = '';
+                this.statusFilter = 'all';
+                this.directionFilter = 'all';
+                this.transportFilter = 'all';
+                this.templateFilter = 'all';
+                this.activeOnly = false;
+                this.sortOrder = this.defaultSort();
+                this.activeFilters = [];
+                this.applyFilters();
+            },
+            goToPage(target) {
+                if (!this.pagination) {
+                    return;
+                }
+                const totalPages = this.pagination.total_pages || 1;
+                const page = Math.min(Math.max(target, 1), totalPages);
+                if (page === this.page) {
+                    return;
+                }
+                this.page = page;
+                this.fetchTrunks();
+            },
+            prevPage() {
+                if (this.pagination?.has_prev) {
+                    this.goToPage(this.pagination.prev_page || (this.page - 1));
+                }
+            },
+            nextPage() {
+                if (this.pagination?.has_next) {
+                    this.goToPage(this.pagination.next_page || (this.page + 1));
+                }
+            },
+            formatDate(value) {
+                if (!value) {
+                    return '—';
+                }
+                const date = new Date(value);
+                if (Number.isNaN(date.getTime())) {
+                    return value;
+                }
+                return date.toLocaleString();
+            },
+            formatDuration(milliseconds) {
+                const value = Number(milliseconds);
+                if (!Number.isFinite(value) || value < 0) {
+                    return null;
+                }
+                if (value >= 1000) {
+                    const seconds = value / 1000;
+                    if (seconds >= 10) {
+                        return `${Math.round(seconds)}s`;
+                    }
+                    return `${seconds.toFixed(1)}s`;
+                }
+                return `${Math.round(value)}ms`;
+            },
+            normalizeReloadMetrics(raw) {
+                if (!raw || typeof raw !== 'object') {
+                    return null;
+                }
+                const toCount = (input) => {
+                    const value = Number(input);
+                    return Number.isFinite(value) && value >= 0 ? value : 0;
+                };
+                const durationRaw = Number(raw.duration_ms);
+                const generatedRaw = raw.generated;
+                const generated = generatedRaw && typeof generatedRaw === 'object'
+                    ? {
+                        entries: toCount(generatedRaw.entries),
+                        path: generatedRaw.path ? String(generatedRaw.path) : null,
+                        backup: generatedRaw.backup ? String(generatedRaw.backup) : null,
+                    }
+                    : null;
+                return {
+                    total: toCount(raw.total),
+                    config_count: toCount(raw.config_count),
+                    file_count: toCount(raw.file_count),
+                    generated,
+                    duration_ms: Number.isFinite(durationRaw) ? durationRaw : null,
+                    started_at: raw.started_at || null,
+                    finished_at: raw.finished_at || null,
+                    files: Array.isArray(raw.files) ? raw.files.map((item) => String(item)) : [],
+                    patterns: Array.isArray(raw.patterns) ? raw.patterns.map((item) => String(item)) : [],
+                };
+            },
+            buildReloadSummary(details) {
+                if (!details || typeof details !== 'object') {
+                    return 'Reload complete.';
+                }
+                const total = Number(details.total);
+                const duration = this.formatDuration(details.duration_ms);
+                const totalText = Number.isFinite(total) && total >= 0
+                    ? `${total} trunk${total === 1 ? '' : 's'}`
+                    : null;
+                if (totalText && duration) {
+                    return `${totalText} in ${duration}`;
+                }
+                if (totalText) {
+                    return totalText;
+                }
+                if (duration) {
+                    return `Completed in ${duration}`;
+                }
+                return 'Reload complete.';
+            },
+            directionLabel(value) {
+                const normalized = String(value || '').toLowerCase();
+                if (normalized === 'inbound') return 'Inbound';
+                if (normalized === 'outbound') return 'Outbound';
+                if (normalized === 'bidirectional') return 'Bi-directional';
+                return value || 'Unknown';
+            },
+            statusTabs() {
+                return this.statusOptions.filter((option) => option.value !== 'all');
+            },
+            selectStatusTab(value) {
+                if (this.statusFilter === value) {
+                    return;
+                }
+                this.statusFilter = value;
+                this.applyFilters();
+            },
+            setDirection(value) {
+                if (this.directionFilter === value) {
+                    return;
+                }
+                this.directionFilter = value;
+                this.applyFilters();
+            },
+            filterOptionLabel(key) {
+                const found = this.filterOptions.find((item) => item.key === key);
+                return found ? found.label : key;
+            },
+            formatFilterValue(key) {
+                switch (key) {
+                    case 'status':
+                        return this.statusFilter === 'all'
+                            ? 'Any status'
+                            : this.statusBadgeLabel(this.statusFilter);
+                    case 'transport': {
+                        if (this.transportFilter === 'all') {
+                            return 'Any transport';
+                        }
+                        const option = this.transportOptions.find((item) => item.value === this.transportFilter);
+                        return option ? option.label : this.transportFilter.toUpperCase();
+                    }
+                    case 'template': {
+                        if (this.templateFilter === 'all') {
+                            return 'Any template';
+                        }
+                        const option = this.templateOptions.find((item) => item.value === this.templateFilter);
+                        return option ? option.label : this.templateFilter;
+                    }
+                    case 'active':
+                        return this.activeOnly ? 'Showing active only' : 'All trunks';
+                    default:
+                        return '';
+                }
+            },
+            addFilter(event) {
+                const key = event?.target?.value;
+                if (!key) {
+                    return;
+                }
+                if (!this.activeFilters.includes(key)) {
+                    this.activeFilters.push(key);
+                }
+                if (event && event.target) {
+                    event.target.value = '';
+                }
+            },
+            removeFilter(key) {
+                this.activeFilters = this.activeFilters.filter((item) => item !== key);
+                switch (key) {
+                    case 'status':
+                        this.statusFilter = 'all';
+                        break;
+                    case 'transport':
+                        this.transportFilter = 'all';
+                        break;
+                    case 'template':
+                        this.templateFilter = 'all';
+                        break;
+                    case 'active':
+                        this.activeOnly = false;
+                        break;
+                    default:
+                        break;
+                }
+                this.applyFilters();
+            },
+            syncActiveFilters() {
+                const next = [];
+                if (this.statusFilter !== 'all') {
+                    next.push('status');
+                }
+                if (this.transportFilter !== 'all') {
+                    next.push('transport');
+                }
+                if (this.templateFilter !== 'all') {
+                    next.push('template');
+                }
+                if (this.activeOnly) {
+                    next.push('active');
+                }
+                this.activeFilters = Array.from(new Set([...this.activeFilters, ...next]));
+            },
+            defaultSort() {
+                return 'updated_at_desc';
+            },
+            statusBadgeLabel(status) {
+                const normalized = String(status || '').toLowerCase();
+                if (!normalized) {
+                    return 'Unknown';
+                }
+                return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+            },
+            statusBadgeClasses(status) {
+                const normalized = String(status || '').toLowerCase();
+                if (normalized === 'healthy') return 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100';
+                if (normalized === 'warning') return 'bg-amber-50 text-amber-600 ring-1 ring-amber-100';
+                if (normalized === 'standby') return 'bg-sky-50 text-sky-600 ring-1 ring-sky-100';
+                if (normalized === 'offline') return 'bg-rose-50 text-rose-600 ring-1 ring-rose-100';
+                return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200';
+            },
+            statusDotClasses(status) {
+                const normalized = String(status || '').toLowerCase();
+                if (normalized === 'healthy') return 'bg-emerald-400';
+                if (normalized === 'warning') return 'bg-amber-400';
+                if (normalized === 'standby') return 'bg-sky-400';
+                if (normalized === 'offline') return 'bg-rose-400';
+                return 'bg-slate-400';
+            },
+
+            capacitySummary(trunk) {
+                const cps = trunk?.max_cps ?? '—';
+                const channels = trunk?.max_concurrent ?? '—';
+                return `${cps} cps · ${channels} ch`;
+            },
+            detailUrl(id) {
+                return `${this.basePath}/sip-trunk/${id}`;
+            },
+            confirmDelete(trunk) {
+                if (!trunk || !trunk.id) {
+                    return;
+                }
+                window.dispatchEvent(new CustomEvent('console:confirm', {
+                    detail: {
+                        title: 'Delete SIP trunk',
+                        message: `Delete trunk ${trunk.display_name || trunk.name}? This action cannot be undone.`,
+                        confirmLabel: 'Delete',
+                        cancelLabel: 'Cancel',
+                        destructive: true,
+                        onConfirm: () => this.deleteTrunk(trunk),
+                    },
+                }));
+            },
+            async deleteTrunk(trunk) {
+                if (!trunk || !trunk.id) {
+                    return;
+                }
+                this.processingDelete = trunk.id;
+                try {
+                    const response = await fetch(this.detailUrl(trunk.id), {
+                        method: 'DELETE',
+                        headers: {
+                            'Accept': 'application/json',
+                        },
+                    });
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok) {
+                        throw new Error(data?.message || 'Failed to delete trunk');
+                    }
+                    this.flash = 'SIP trunk deleted.';
+                    await this.fetchTrunks();
+                } catch (err) {
+                    console.error(err);
+                    this.error = err?.message || 'Failed to delete trunk';
+                }
+                this.processingDelete = null;
+            },
+            confirmReload() {
+                if (this.reloading) {
+                    return;
+                }
+                window.dispatchEvent(new CustomEvent('console:confirm', {
+                    detail: {
+                        title: 'Reload SIP trunks',
+                        message: 'Reload trunks from configuration and database sources? Active calls continue using cached data until reloaded values are applied.',
+                        confirmLabel: 'Reload',
+                        cancelLabel: 'Cancel',
+                        destructive: false,
+                        onConfirm: () => this.reloadTrunks(),
+                    },
+                }));
+            },
+            async reloadTrunks() {
+                if (this.reloading) {
+                    return;
+                }
+                this.reloading = true;
+                this.error = null;
+                const endpoint = `${this.amiEndpoint.replace(/\/$/, '')}/reload/trunks`;
+                let successMessage = null;
+                try {
+                    const response = await fetch(endpoint, {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                        },
+                        credentials: 'include',
+                    });
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok) {
+                        throw new Error(data?.message || data?.error || 'Failed to reload SIP trunks');
+                    }
+                    const count = Number.isFinite(Number(data?.trunks_reloaded)) ? Number(data.trunks_reloaded) : null;
+                    const metrics = this.normalizeReloadMetrics(data?.metrics);
+                    this.lastReload = metrics;
+                    if (metrics && count !== null) {
+                        const durationText = this.formatDuration(metrics.duration_ms);
+                        if (durationText) {
+                            successMessage = `Reloaded ${count} trunk${count === 1 ? '' : 's'} in ${durationText}.`;
+                        }
+                    }
+                    if (!successMessage) {
+                        successMessage = count !== null
+                            ? `Reloaded ${count} trunk${count === 1 ? '' : 's'}.`
+                            : 'SIP trunks reloaded.';
+                    }
+                    await this.fetchTrunks();
+                    this.flash = successMessage;
+                } catch (err) {
+                    console.error(err);
+                    this.error = err?.message || 'Failed to reload SIP trunks';
+                } finally {
+                    this.reloading = false;
+                }
+            },
+        }));
+    });
+</script>
+
+{% endblock %}

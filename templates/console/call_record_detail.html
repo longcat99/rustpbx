@@ -1,0 +1,2378 @@
+{% extends "console/layout.html" %}
+{% block title %}Call Record Detail · {{site_name|default('RustPBX')}}{% endblock %}
+{% block content %}
+<div class="p-6">
+    <div class="mx-auto max-w-6xl space-y-6" x-data="callRecordDetail({{ call_data | escape }})">
+        <header class="flex flex-col gap-4 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
+            <div class="space-y-2">
+                <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-sky-600">
+                    <a :href="backUrl"
+                        class="inline-flex items-center gap-1 text-slate-500 transition hover:text-sky-600">
+                        <svg class="h-3 w-3" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 5l-5 5 5 5" />
+                        </svg>
+                        Back
+                    </a>
+                    <span>/</span>
+                    <span x-text="record.display_id || record.id"></span>
+                </div>
+                <h1 class="text-3xl font-semibold text-slate-900">
+                    <span>#</span>
+                    <span x-text="record.display_id || record.id"></span>
+                </h1>
+                <div class="flex items-center gap-2 text-xs text-slate-500">
+                    <span>Call-Id</span>
+                    <span class="font-mono" :title="record.call_id" x-text="record.call_id || '—'"></span>
+                    <template x-if="record.call_id">
+                        <div class="flex items-center gap-1">
+                            <button type="button"
+                                class="inline-flex h-5 w-5 items-center justify-center rounded border border-slate-200 text-slate-400 transition hover:border-slate-300 hover:text-slate-600"
+                                title="Copy call ID" aria-label="Copy call ID" @click="copyCallId(record.call_id)">
+                                <svg class="h-3 w-3" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                                    stroke-width="1.6">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 6h8v8H6z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 4h8" />
+                                </svg>
+                            </button>
+                            <span class="text-[10px] font-semibold text-emerald-600"
+                                x-show="copiedCallId === record.call_id" x-transition.opacity>Copied</span>
+                        </div>
+                    </template>
+                </div>
+                <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-500">
+                    <div class="flex items-center gap-2">
+                        <span class="font-semibold text-slate-400 uppercase text-[10px]">Start</span>
+                        <span x-text="formatDateTime(record.started_at)"></span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-semibold text-slate-400 uppercase text-[10px]">Ring</span>
+                        <span x-text="formatDateTime(record.ring_time)"></span>
+                    </div>
+                    <template x-if="record.ring_time && (record.answer_time || record.ended_at)">
+                        <div class="flex items-center gap-2">
+                            <span class="font-semibold text-slate-400 uppercase text-[10px]">Ring Duration</span>
+                            <span class="font-mono text-slate-900"
+                                x-text="formatDuration((new Date(record.answer_time || record.ended_at) - new Date(record.ring_time))/1000)"></span>
+                        </div>
+                    </template>
+                    <template x-if="record.answer_time">
+                        <div class="flex items-center gap-2">
+                            <span class="font-semibold text-slate-400 uppercase text-[10px]">Answer</span>
+                            <span x-text="formatDateTime(record.answer_time)"></span>
+                        </div>
+                    </template>
+                    <template x-if="record.ended_at">
+                        <div class="flex items-center gap-2">
+                            <span class="font-semibold text-slate-400 uppercase text-[10px]">End</span>
+                            <span x-text="formatDateTime(record.ended_at)"></span>
+                        </div>
+                    </template>
+                    <div class="flex items-center gap-2">
+                        <span class="font-semibold text-slate-400 uppercase text-[10px]">Duration</span>
+                        <span class="font-mono text-slate-900" x-text="formatDuration(record.duration_secs)"></span>
+                    </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 text-xs font-semibold">
+                    <span class="inline-flex items-center gap-1 rounded-full px-3 py-1"
+                        :class="statusClasses(record.status)">
+                        <span class="h-1.5 w-1.5 rounded-full" :class="statusDot(record.status)"></span>
+                        <span x-text="statusLabel(record.status)"></span>
+                    </span>
+                    <template x-if="record.status === 'failed' && record.status_code">
+                        <span
+                            class="inline-flex items-center gap-1 rounded-full bg-rose-50 px-3 py-1 text-[11px] font-semibold text-rose-600">
+                            <span class="font-mono" x-text="record.status_code"></span>
+                            <span x-text="statusReasonLabel(record.status_code)"></span>
+                        </span>
+                    </template>
+                    <span class="inline-flex items-center gap-1 rounded-full px-3 py-1"
+                        :class="directionClasses(record.direction)">
+                        <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                            stroke-width="1.6">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 10h10M10 5l5 5-5 5" />
+                        </svg>
+                        <span x-text="directionLabel(record.direction)"></span>
+                    </span>
+                    <span
+                        class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-600">
+                        <svg class="h-3 w-3" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4h12v12H4z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 4v12M12 8h4" />
+                        </svg>
+                        <span x-text="record.sip_gateway || '—'"></span>
+                    </span>
+                </div>
+                <template x-if="record.hangup_messages && record.hangup_messages.length">
+                    <div class="mt-2 space-y-1 text-xs text-slate-500">
+                        <template x-for="(msg, idx) in record.hangup_messages" :key="`hangup-${idx}-${msg.code}`">
+                            <div
+                                class="flex flex-wrap items-center gap-2 rounded border border-slate-100 bg-slate-50 px-2 py-1">
+                                <span class="font-semibold text-slate-700"
+                                    x-text="hangupTargetLabel(msg.target)"></span>
+                                <span class="font-mono text-rose-600" x-text="msg.code"></span>
+                                <span class="text-slate-600" x-text="msg.reason || statusReasonLabel(msg.code)"></span>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+            </div>
+            <div class="flex flex-wrap items-center gap-3 text-sm">
+                <a :href="actions.download_metadata || '#'"
+                    class="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 font-semibold text-slate-600 transition hover:border-sky-300 hover:text-sky-700">
+                    <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 12l6 6 6-6" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10 18V4" />
+                    </svg>
+                    Metadata JSON
+                </a>
+                <a :href="actions.download_sip_flow || '#'"
+                    class="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 font-semibold text-slate-600 transition hover:border-sky-300 hover:text-sky-700">
+                    <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4h12v12H4z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 8h8M6 12h4" />
+                    </svg>
+                    SIP trace JSON
+                </a>
+            </div>
+        </header>
+
+        <section class="space-y-4">
+            <div class="rounded-xl bg-white p-2 shadow-sm ring-1 ring-black/5">
+                <nav class="inline-flex w-full flex-wrap gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 text-xs font-semibold text-slate-600"
+                    role="tablist" aria-label="Call record detail tabs">
+                    <button type="button" class="flex-1 rounded-md px-3 py-1.5 text-left transition sm:flex-none"
+                        :class="detailTab === 'overview' ? 'bg-white text-sky-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+                        :aria-selected="detailTab === 'overview'" aria-controls="call-record-tab-overview"
+                        @click="detailTab = 'overview'">
+                        <div class="flex flex-col">
+                            <span class="text-[13px]">Overview</span>
+                            <span class="text-[11px] font-normal text-slate-400">Participants, media, transcript</span>
+                        </div>
+                    </button>
+                    <button type="button" class="flex-1 rounded-md px-3 py-1.5 text-left transition sm:flex-none"
+                        :class="detailTab === 'diagnostics' ? 'bg-white text-sky-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+                        :aria-selected="detailTab === 'diagnostics'" aria-controls="call-record-tab-diagnostics"
+                        @click="detailTab = 'diagnostics'">
+                        <div class="flex flex-col">
+                            <span class="text-[13px]">Signalling</span>
+                            <span class="text-[11px] font-normal text-slate-400">SIP flow, RTP metrics</span>
+                        </div>
+                    </button>
+                    <button type="button" class="flex-1 rounded-md px-3 py-1.5 text-left transition sm:flex-none"
+                        :class="detailTab === 'notes' ? 'bg-white text-sky-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+                        :aria-selected="detailTab === 'notes'" aria-controls="call-record-tab-notes"
+                        @click="detailTab = 'notes'">
+                        <div class="flex flex-col">
+                            <span class="text-[13px]">Notes</span>
+                            <span class="text-[11px] font-normal text-slate-400">Tags, notes</span>
+                        </div>
+                    </button>
+                </nav>
+            </div>
+
+            <div x-show="detailTab === 'overview'" x-cloak x-transition.opacity class="space-y-4"
+                id="call-record-tab-overview" role="tabpanel" tabindex="0">
+
+                <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+                    <div class="mt-6 grid gap-3 sm:grid-cols-2">
+                        <template x-for="participant in participants" :key="participant.role">
+                            <div class="rounded-lg border border-slate-200 p-3 text-sm text-slate-600">
+                                <div class="flex items-center justify-between text-xs text-slate-400">
+                                    <span x-text="participant.label"></span>
+                                    <span class="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-600"
+                                        x-text="participant.network"></span>
+                                </div>
+                                <div class="mt-1 text-sm font-semibold text-slate-900" x-text="participant.name || '—'">
+                                </div>
+                                <template x-if="participant.role === 'caller' || participant.role === 'callee'">
+                                    <div
+                                        class="mt-3 space-y-1 rounded border border-dashed border-slate-200 px-3 py-2 text-[11px] text-slate-500">
+                                        <div class="flex items-center justify-between">
+                                            <span class="font-semibold text-slate-600">Original</span>
+                                            <span class="font-mono"
+                                                x-text="(rewrite[participant.role] && rewrite[participant.role].original) || '—'"></span>
+                                        </div>
+                                        <div class="flex items-center justify-between">
+                                            <span class="font-semibold text-slate-600">Rewrite</span>
+                                            <span class="font-mono"
+                                                x-text="(rewrite[participant.role] && rewrite[participant.role].final) || '—'"></span>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+                <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+                    <h2 class="text-base font-semibold text-slate-900">Recording & participants</h2>
+                    <p class="mt-1 text-xs text-slate-500">Validate caller identification, agent mapping, and playback
+                        the original media stream.</p>
+                    <template x-if="record.recording && record.recording.url">
+                        <div class="mt-4 space-y-3">
+                            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                    <p class="text-sm font-semibold text-slate-900">Stereo waveform (WAV)</p>
+                                    <p class="text-xs text-slate-500">Left channel mirrors caller audio · Right channel
+                                        mirrors callee audio.</p>
+                                </div>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <button type="button"
+                                        class="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-300 disabled:cursor-not-allowed disabled:opacity-60"
+                                        :disabled="!waveformReady" @click="toggleWaveformPlayback()">
+                                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                            stroke-width="1.8">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5v14M15 5v14"
+                                                x-show="waveformPlaying" x-cloak></path>
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 5v14l10-7z"
+                                                x-show="!waveformPlaying" x-cloak></path>
+                                        </svg>
+                                        <span x-text="waveformPlaying ? 'Pause' : 'Play'">
+                                            Play
+                                        </span>
+                                    </button>
+                                    <button type="button"
+                                        class="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-200 disabled:cursor-not-allowed disabled:opacity-60"
+                                        :disabled="!waveformReady" @click="stopWaveform()">
+                                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                            stroke-width="1.8">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 8h8v8H8z" />
+                                        </svg>
+                                        Stop
+                                    </button>
+                                    <a :href="actions.download_recording || record.recording.url"
+                                        class="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-sky-300 hover:text-sky-700"
+                                        target="_blank" rel="noopener">
+                                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                            stroke-width="1.8">
+                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                d="M12 5v12m0 0l-4-4m4 4l4-4" />
+                                        </svg>
+                                        Download WAV
+                                    </a>
+                                </div>
+                            </div>
+                            <div class="rounded-lg border border-slate-200 bg-slate-900/5 p-3">
+                                <div x-ref="waveformCanvas" class="h-20 w-full sm:h-24"></div>
+                                <template x-if="waveformLoading">
+                                    <div class="mt-3 flex items-center gap-2 text-xs text-slate-500">
+                                        <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="1.5">
+                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                d="M12 3v3m0 12v3m9-9h-3M6 12H3m13.95-6.95l-2.12 2.12M8.17 15.83l-2.12 2.12m0-12.12l2.12 2.12m9.66 9.66l2.12 2.12" />
+                                        </svg>
+                                        Loading waveform…
+                                    </div>
+                                </template>
+                                <template x-if="waveformError">
+                                    <div class="mt-3 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-600"
+                                        x-text="waveformError"></div>
+                                </template>
+                            </div>
+                            <div
+                                class="flex flex-col gap-2 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+                                <div class="font-mono text-sm text-slate-700">
+                                    <span x-text="formatWaveformTimestamp(waveformPosition)"></span>
+                                    <span class="text-slate-400">/</span>
+                                    <span x-text="formatWaveformTimestamp(waveformDuration)"></span>
+                                </div>
+                                <div class="flex flex-wrap gap-2">
+                                    <button type="button"
+                                        class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold transition focus:outline-none focus:ring-2 focus:ring-offset-1"
+                                        :class="waveformChannels.left ? 'border-sky-200 bg-sky-50 text-sky-600 focus:ring-sky-200' : 'border-slate-200 bg-white text-slate-400 focus:ring-slate-200'"
+                                        :aria-pressed="waveformChannels.left" :disabled="!waveformReady"
+                                        @click="toggleWaveformChannel('left')">
+                                        <span class="h-2 w-2 rounded-full"
+                                            :class="waveformChannels.left ? 'bg-sky-500' : 'bg-slate-300'"></span>
+                                        Left · Caller
+                                    </button>
+                                    <button type="button"
+                                        class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold transition focus:outline-none focus:ring-2 focus:ring-offset-1"
+                                        :class="waveformChannels.right ? 'border-emerald-200 bg-emerald-50 text-emerald-600 focus:ring-emerald-200' : 'border-slate-200 bg-white text-slate-400 focus:ring-slate-200'"
+                                        :aria-pressed="waveformChannels.right" :disabled="!waveformReady"
+                                        @click="toggleWaveformChannel('right')">
+                                        <span class="h-2 w-2 rounded-full"
+                                            :class="waveformChannels.right ? 'bg-emerald-500' : 'bg-slate-300'"></span>
+                                        Right · Callee
+                                    </button>
+                                </div>
+                            </div>
+                            <audio x-ref="waveformFallbackAudio" class="sr-only" controls preload="none"
+                                :src="record.recording.url"></audio>
+                        </div>
+                    </template>
+                    <template x-if="!record.recording || !record.recording.url">
+                        <div
+                            class="mt-4 rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-xs text-slate-400">
+                            No media recording stored for this session.
+                        </div>
+                    </template>
+
+                </div>
+
+            </div>
+
+            <div x-show="detailTab === 'diagnostics'" x-cloak x-transition.opacity class="space-y-4"
+                id="call-record-tab-diagnostics" role="tabpanel" tabindex="0">
+                <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+                    <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div>
+                            <h2 class="text-base font-semibold text-slate-900">Signalling</h2>
+                            <p class="text-xs text-slate-500">Inspect SIP signalling timeline to speed up
+                                troubleshooting.</p>
+                        </div>
+                    </div>
+
+                    <!-- RTP Streams -->
+                    <div class="mt-4 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-black/5">
+                        <div class="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2">
+                            <div class="font-medium text-slate-700 text-xs">RTP Streams</div>
+                            <!-- Analytics removed
+                            <template x-if="mediaMetrics && mediaMetrics.rtp_packets !== undefined">
+                                <div class="text-[10px] text-slate-500">
+                                    Total Packets (Analytics): <span class="font-mono text-slate-700"
+                                        x-text="mediaMetrics.rtp_packets"></span>
+                                </div>
+                            </template>
+                            -->
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs" x-show="rtpStreams && rtpStreams.length">
+                                <thead class="bg-slate-50 text-slate-500">
+                                    <tr>
+                                        <th class="px-4 py-2 font-semibold">Leg</th>
+                                        <th class="px-4 py-2 font-semibold">Source</th>
+                                        <th class="px-4 py-2 font-semibold">Destination</th>
+                                        <th class="px-4 py-2 font-semibold text-right">Packets</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100">
+                                    <template x-for="(stream, idx) in rtpStreams" :key="idx">
+                                        <tr class="hover:bg-slate-50">
+                                            <td class="px-4 py-2 font-medium text-slate-700 w-24">
+                                                <span
+                                                    class="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-500/10"
+                                                    x-text="stream.role"></span>
+                                            </td>
+                                            <td class="px-4 py-2 font-mono text-slate-600" x-text="stream.src_addr">
+                                            </td>
+                                            <td class="px-4 py-2 font-mono text-slate-600" x-text="stream.dst_addr">
+                                            </td>
+                                            <td class="px-4 py-2 font-mono text-emerald-600 text-right"
+                                                x-text="stream.packet_count"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                            <div class="p-4 text-center text-xs text-slate-400"
+                                x-show="!rtpStreams || !rtpStreams.length">
+                                <span x-show="sipFlowLoading">Calculating RTP streams...</span>
+                                <span x-show="!sipFlowLoading">No RTP stream details available.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SIP Signalling Timeline -->
+                    <div class="mt-4">
+                        <template x-if="sipFlowLoading">
+                            <div class="rounded-xl bg-slate-50 p-12 text-center">
+                                <svg class="inline-block h-5 w-5 animate-spin text-slate-400"
+                                    xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                        stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor"
+                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                    </path>
+                                </svg>
+                                <span class="ml-2 text-xs text-slate-400">Loading signalling data...</span>
+                            </div>
+                        </template>
+
+                        <template x-if="!sipFlowLoading && sipMessages.length === 0">
+                            <div class="rounded-xl bg-slate-50 p-12 text-center text-xs text-slate-400">
+                                No signalling data available.
+                            </div>
+                        </template>
+
+                        <template x-if="!sipFlowLoading && sipMessages.length > 0">
+                            <div class="flex gap-4">
+                                <!-- Left: Timeline (3/5) -->
+                                <div class="flex-1 w-3/5 flex flex-col gap-4">
+                                    <!-- Timeline Header -->
+                                    <div
+                                        class="grid grid-cols-[90px_1fr_1fr_1fr] gap-2 px-4 py-2 bg-slate-50 rounded-lg border border-slate-200">
+                                        <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
+                                            Time</div>
+                                        <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide text-center"
+                                            x-text="getParticipantLabel('caller')">Caller</div>
+                                        <div
+                                            class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide text-center">
+                                            PBX</div>
+                                        <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide text-center"
+                                            x-text="getParticipantLabel('callee')">Callee</div>
+                                    </div>
+
+                                    <!-- Timeline Messages -->
+                                    <div class="space-y-0.5 max-h-[calc(100vh-280px)] overflow-y-auto">
+                                        <template x-for="(entry, idx) in sipMessages"
+                                            :key="'msg-' + idx + '-' + entry.timestamp">
+                                            <div class="grid grid-cols-[90px_1fr_1fr_1fr] gap-2 items-center px-4 py-1 hover:bg-sky-50/50 transition-colors cursor-pointer group relative rounded"
+                                                @click="selectedSipEntry = entry"
+                                                :class="selectedSipEntry === entry ? 'bg-sky-50' : ''">
+
+                                                <!-- Time Column -->
+                                                <div class="text-[10px] font-mono text-slate-500"
+                                                    x-text="formatDateTimeWithMs(entry.timestamp)"></div>
+
+                                                <!-- Caller Column -->
+                                                <div class="relative">
+                                                    <template x-if="getRole(entry.src_addr) === 'leg-a'">
+                                                        <div>
+                                                            <div class="rounded-lg border px-2 py-1 text-xs shadow-sm transition hover:shadow-md"
+                                                                :class="getMessageColorClass(entry.raw_message)">
+                                                                <div class="font-semibold whitespace-nowrap"
+                                                                    x-text="extractSipMethod(entry.raw_message)"></div>
+                                                            </div>
+                                                            <!-- Arrow Right -->
+                                                            <div
+                                                                class="absolute left-full top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
+                                                                <svg class="w-6 h-2 text-sky-400" viewBox="0 0 24 8"
+                                                                    fill="none">
+                                                                    <line x1="0" y1="4" x2="18" y2="4"
+                                                                        stroke="currentColor" stroke-width="1.5" />
+                                                                    <polygon points="18,0 24,4 18,8"
+                                                                        fill="currentColor" />
+                                                                </svg>
+                                                            </div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+
+                                                <!-- PBX Column -->
+                                                <div class="relative">
+                                                    <!-- PBX to Caller (PBX sends response back) -->
+                                                    <template
+                                                        x-if="getRole(entry.src_addr) === 'pbx' && (getRole(entry.dst_addr) === 'leg-a' || entry._correctedDstRole === 'leg-a')">
+                                                        <div>
+                                                            <!-- Arrow Left -->
+                                                            <div
+                                                                class="absolute right-full top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
+                                                                <svg class="w-6 h-2 text-emerald-400" viewBox="0 0 24 8"
+                                                                    fill="none">
+                                                                    <polygon points="6,0 0,4 6,8" fill="currentColor" />
+                                                                    <line x1="6" y1="4" x2="24" y2="4"
+                                                                        stroke="currentColor" stroke-width="1.5" />
+                                                                </svg>
+                                                            </div>
+                                                            <div class="rounded-lg border px-2 py-1 text-xs shadow-sm transition hover:shadow-md"
+                                                                :class="getMessageColorClass(entry.raw_message)">
+                                                                <div class="font-semibold whitespace-nowrap"
+                                                                    x-text="extractSipMethod(entry.raw_message)"></div>
+                                                            </div>
+                                                        </div>
+                                                    </template>
+
+                                                    <!-- PBX to Callee (PBX forwards request) -->
+                                                    <template
+                                                        x-if="getRole(entry.src_addr) === 'pbx' && (getRole(entry.dst_addr) === 'leg-b' || entry._correctedDstRole === 'leg-b')">
+                                                        <div>
+                                                            <div class="rounded-lg border px-2 py-1 text-xs shadow-sm transition hover:shadow-md"
+                                                                :class="getMessageColorClass(entry.raw_message)">
+                                                                <div class="font-semibold whitespace-nowrap"
+                                                                    x-text="extractSipMethod(entry.raw_message)"></div>
+                                                            </div>
+                                                            <!-- Arrow Right -->
+                                                            <div
+                                                                class="absolute left-full top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
+                                                                <svg class="w-6 h-2 text-indigo-400" viewBox="0 0 24 8"
+                                                                    fill="none">
+                                                                    <line x1="0" y1="4" x2="18" y2="4"
+                                                                        stroke="currentColor" stroke-width="1.5" />
+                                                                    <polygon points="18,0 24,4 18,8"
+                                                                        fill="currentColor" />
+                                                                </svg>
+                                                            </div>
+                                                        </div>
+                                                    </template>
+
+                                                    <!-- PBX internal messages (same src and dst, no correction) -->
+                                                    <template
+                                                        x-if="getRole(entry.src_addr) === 'pbx' && getRole(entry.dst_addr) === 'pbx' && !entry._correctedDstRole">
+                                                        <div class="rounded-lg border px-2 py-1 text-xs shadow-sm transition hover:shadow-md border-dashed"
+                                                            :class="getMessageColorClass(entry.raw_message)">
+                                                            <div class="font-semibold whitespace-nowrap"
+                                                                x-text="extractSipMethod(entry.raw_message)"></div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+
+                                                <!-- Callee Column -->
+                                                <div class="relative">
+                                                    <!-- Only show messages FROM leg-b (callee sends) -->
+                                                    <template x-if="getRole(entry.src_addr) === 'leg-b'">
+                                                        <div>
+                                                            <!-- Arrow Left -->
+                                                            <div
+                                                                class="absolute right-full top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
+                                                                <svg class="w-6 h-2 text-purple-400" viewBox="0 0 24 8"
+                                                                    fill="none">
+                                                                    <polygon points="6,0 0,4 6,8" fill="currentColor" />
+                                                                    <line x1="6" y1="4" x2="24" y2="4"
+                                                                        stroke="currentColor" stroke-width="1.5" />
+                                                                </svg>
+                                                            </div>
+                                                            <div class="rounded-lg border px-2 py-1 text-xs shadow-sm transition hover:shadow-md"
+                                                                :class="getMessageColorClass(entry.raw_message)">
+                                                                <div class="font-semibold whitespace-nowrap"
+                                                                    x-text="extractSipMethod(entry.raw_message)"></div>
+                                                            </div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+
+                                <!-- Right: Detail Panel (2/5) -->
+                                <div class="w-2/5 flex flex-col">
+                                    <div
+                                        class="rounded-xl bg-white shadow-sm ring-1 ring-black/5 overflow-hidden flex flex-col h-[calc(100vh-280px)]">
+                                        <div
+                                            class="border-b border-slate-200 bg-slate-50 px-4 py-2 flex justify-between items-center flex-shrink-0">
+                                            <span class="font-medium text-slate-700 text-xs">Packet Details</span>
+                                            <span class="font-mono text-slate-500 text-[10px]" x-show="selectedSipEntry"
+                                                x-text="selectedSipEntry ? formatDateTimeWithMs(selectedSipEntry.timestamp) : ''"></span>
+                                        </div>
+                                        <div class="p-4 overflow-auto flex-1 bg-slate-900">
+                                            <template x-if="selectedSipEntry">
+                                                <pre class="font-mono text-[11px] text-emerald-400 whitespace-pre-wrap break-all"
+                                                    x-text="selectedSipEntry.raw_message || 'No content'"></pre>
+                                            </template>
+                                            <template x-if="!selectedSipEntry">
+                                                <div
+                                                    class="h-full flex items-center justify-center text-slate-500 text-xs">
+                                                    Select a message to view details
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
+            <div x-show="detailTab === 'notes'" x-cloak x-transition.opacity class="space-y-4"
+                id="call-record-tab-notes" role="tabpanel" tabindex="0">
+                <div class="grid gap-4 lg:grid-cols-2">
+                    <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+                        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <h2 class="text-base font-semibold text-slate-900">Tags</h2>
+                                <p class="text-xs text-slate-500">Label conversations for follow-up workflows.</p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input type="text" x-model.trim="tagInput"
+                                    class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                    placeholder="Add tag" @keyup.enter.prevent="addTag">
+                                <button type="button"
+                                    class="inline-flex items-center rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                                    :disabled="tagSaving || !tagInput" @click="addTag">Add</button>
+                            </div>
+                        </div>
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <template x-for="(tag, index) in (record.tags || [])" :key="tag + index">
+                                <span
+                                    class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600">
+                                    <span x-text="tag"></span>
+                                    <button type="button"
+                                        class="text-slate-400 transition hover:text-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                        :disabled="tagSaving" @click="removeTag(index)">
+                                        <svg class="h-3 w-3" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                                            stroke-width="1.6">
+                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                d="M6 6l8 8M6 14L14 6" />
+                                        </svg>
+                                    </button>
+                                </span>
+                            </template>
+                            <template x-if="!Array.isArray(record.tags) || record.tags.length === 0">
+                                <span class="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-400">No tags
+                                    yet</span>
+                            </template>
+                        </div>
+                        <p class="mt-2 text-xs text-rose-500" x-show="tagError" x-text="tagError"></p>
+                        <p class="mt-2 text-xs text-slate-400" x-show="tagSaving">Saving tags…</p>
+                    </div>
+
+                    <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+                        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <h2 class="text-base font-semibold text-slate-900">Call notes</h2>
+                                <p class="text-xs text-slate-500">Document commitments, escalations, or customer
+                                    sentiment.</p>
+                            </div>
+                            <button type="button"
+                                class="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:border-sky-300 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                :disabled="noteSaving" @click="saveNotes">
+                                <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                                    stroke-width="1.6">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 4h12v12H4z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 10h8M6 14h5M6 6h8" />
+                                </svg>
+                                <span x-text="noteSaving ? 'Saving…' : 'Save note'"></span>
+                            </button>
+                        </div>
+                        <textarea x-model="noteDraft" rows="6"
+                            class="mt-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                            placeholder="Add internal remark or follow-up task..."></textarea>
+                        <p class="mt-2 text-xs text-rose-500" x-show="noteError" x-text="noteError"></p>
+                        <p class="mt-1 text-xs text-slate-400" x-show="noteSaving">Saving note…</p>
+                        <p class="mt-2 text-xs text-slate-400" x-show="notes.updated_at">
+                            Last updated <span x-text="formatDateTime(notes.updated_at)"></span>
+                            <span x-show="notes.updated_by">&middot; by <span x-text="notes.updated_by"></span></span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+</div>
+
+<script defer src="https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.min.js"></script>
+
+<script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('callRecordDetail', (payload) => ({
+            init() {
+                const data = typeof payload === 'string' ? JSON.parse(payload || '{}') : (payload || {});
+                this.record = data.record || {};
+                const recordRewrite = (this.record && this.record.rewrite && typeof this.record.rewrite === 'object')
+                    ? this.record.rewrite
+                    : null;
+                const topLevelRewrite = (data.rewrite && typeof data.rewrite === 'object') ? data.rewrite : null;
+                this.rewrite = recordRewrite || topLevelRewrite || {};
+                this.sipFlowEntries = [];
+                this.rtpStreams = [];
+                this.sipFlowColumns = [
+                    { id: 'time', label: 'Time' },
+                    { id: 'source', label: 'Source' },
+                    { id: 'destination', label: 'Destination' },
+                    { id: 'info', label: 'Info' },
+                ];
+                this.selectedSipEntry = null;
+                this.flowStartEpoch = this.parseTimestamp(this.record.started_at);
+                this.mediaMetrics = data.media_metrics || {};
+
+                this.actions = data.actions || {};
+                this.backUrl = data.back_url || '/console/call-records';
+                const fallbackUpdateUrl = this.determineRecordUrl(this.record.id);
+                this.updateUrl = (this.actions && this.actions.update_record)
+                    ? this.actions.update_record
+                    : fallbackUpdateUrl;
+                this.transcriptUrl = (this.actions && this.actions.transcript_url) ? this.actions.transcript_url : '';
+
+                const initialNotes = (data.notes && typeof data.notes === 'object') ? data.notes : {};
+                this.notes = {
+                    text: initialNotes.text || '',
+                    updated_at: initialNotes.updated_at || null,
+                    updated_by: initialNotes.updated_by || null,
+                };
+                this.noteDraft = this.notes.text || '';
+                this.tagError = '';
+                this.noteError = '';
+                this.participants = Array.isArray(data.participants) ? data.participants : [];
+                this.billing = data.billing || {
+                    summary: (this.record && this.record.billing) || {},
+                    snapshot: null,
+                    result: null,
+                };
+                if (!this.record.billing && this.billing && this.billing.summary) {
+                    this.record.billing = this.billing.summary;
+                }
+                this.durationHint = this.record.ended_at ? `Ended ${this.formatDateTime(this.record.ended_at)}` : 'No hangup timestamp recorded';
+                this.detailTab = 'overview';
+
+                const recordingDurationHint = (this.record && this.record.recording && Number(this.record.recording.duration_secs))
+                    || Number(this.record.duration_secs)
+                    || 0;
+                this.waveformDuration = Number.isFinite(recordingDurationHint)
+                    ? Math.max(0, recordingDurationHint)
+                    : 0;
+                this.waveformError = '';
+                this.$nextTick(() => {
+                    if (this.record && this.record.recording && this.record.recording.url) {
+                        this.prepareWaveform();
+                    }
+                    if (this.actions.download_sip_flow) {
+                        this.fetchSipFlow();
+                    }
+                });
+                this.$watch('detailTab', (value) => {
+                    if (value !== 'overview') {
+                        this.stopWaveform();
+                        return;
+                    }
+                    if (
+                        this.record &&
+                        this.record.recording &&
+                        this.record.recording.url &&
+                        !this.waveSurfer &&
+                        !this.waveformError
+                    ) {
+                        this.prepareWaveform();
+                    }
+                });
+                if (typeof window !== 'undefined') {
+                    const cleanup = () => this.destroyWaveform();
+                    window.addEventListener('pagehide', cleanup, { once: true });
+                    window.addEventListener('beforeunload', cleanup, { once: true });
+                }
+            },
+            record: {},
+            sipFlowEntries: [],
+            sipMessages: [],
+            sipFlowColumns: [],
+            sipFlowLoading: false,
+            selectedSipEntry: null,
+            flowStartEpoch: null,
+            mediaMetrics: {},
+            roleMap: new Map(),
+            rolePortMap: {},
+            rtpStreams: [],
+
+            updateUrl: '',
+            transcriptUrl: '',
+            notes: {},
+            noteDraft: '',
+            participants: [],
+            rewrite: {},
+            actions: {},
+            backUrl: '/console/call-records',
+            billing: {},
+            tagInput: '',
+            tagSaving: false,
+            tagError: '',
+            noteSaving: false,
+            noteError: '',
+            asrProcessing: false,
+            durationHint: '',
+            detailTab: 'overview',
+            copiedCallId: null,
+            copyTimer: null,
+            selectedLanguage: 'auto',
+            languageOptions: [],
+            languageSelectionDirty: false,
+            waveSurfer: null,
+            waveformReady: false,
+            waveformLoading: false,
+            waveformPlaying: false,
+            waveformError: '',
+            waveformDuration: 0,
+            waveformPosition: 0,
+            waveformChannels: {
+                left: true,
+                right: true,
+            },
+            waveformOriginalBuffer: null,
+            async addTag() {
+                const value = (this.tagInput || '').trim();
+                if (!value) {
+                    return;
+                }
+                const current = Array.isArray(this.record.tags) ? [...this.record.tags] : [];
+                if (current.includes(value)) {
+                    this.tagInput = '';
+                    return;
+                }
+                const next = [...current, value];
+                this.record.tags = next;
+                this.tagInput = '';
+                this.tagError = '';
+                this.tagSaving = true;
+                try {
+                    const payload = await this.updateRecord({ tags: next });
+                    this.applyUpdatePayload(payload, { syncNoteDraft: false });
+                } catch (err) {
+                    console.error('Failed to add tag', err);
+                    this.record.tags = current;
+                    this.tagError = (err && err.message) ? err.message : 'Failed to update tags';
+                } finally {
+                    this.tagSaving = false;
+                }
+            },
+            async removeTag(index) {
+                const current = Array.isArray(this.record.tags) ? [...this.record.tags] : [];
+                if (index < 0 || index >= current.length) {
+                    return;
+                }
+                const next = [...current];
+                next.splice(index, 1);
+                this.record.tags = next;
+                this.tagError = '';
+                this.tagSaving = true;
+                try {
+                    const payload = await this.updateRecord({ tags: next });
+                    this.applyUpdatePayload(payload, { syncNoteDraft: false });
+                } catch (err) {
+                    console.error('Failed to remove tag', err);
+                    this.record.tags = current;
+                    this.tagError = (err && err.message) ? err.message : 'Failed to update tags';
+                } finally {
+                    this.tagSaving = false;
+                }
+            },
+            async saveNotes() {
+                const text = this.noteDraft || '';
+                const previousNotes = {
+                    text: (this.notes && this.notes.text) || '',
+                    updated_at: (this.notes && this.notes.updated_at) || null,
+                    updated_by: (this.notes && this.notes.updated_by) || null,
+                };
+                this.noteError = '';
+                this.noteSaving = true;
+                try {
+                    const payload = await this.updateRecord({ note: { text } });
+                    this.applyUpdatePayload(payload);
+                } catch (err) {
+                    console.error('Failed to save note', err);
+                    this.noteError = (err && err.message) ? err.message : 'Failed to save note';
+                    this.notes = previousNotes;
+                } finally {
+                    this.noteSaving = false;
+                }
+            },
+            applyUpdatePayload(payload = {}, options = {}) {
+                const syncNoteDraft = options.syncNoteDraft !== false;
+                if (payload && payload.record && Array.isArray(payload.record.tags)) {
+                    this.record.tags = payload.record.tags;
+                }
+                if (payload && Object.prototype.hasOwnProperty.call(payload, 'notes')) {
+                    if (payload.notes && typeof payload.notes === 'object') {
+                        this.notes = {
+                            text: payload.notes.text || '',
+                            updated_at: payload.notes.updated_at || null,
+                            updated_by: payload.notes.updated_by || null,
+                        };
+                    } else {
+                        this.notes = { text: '', updated_at: null, updated_by: null };
+                    }
+                    if (syncNoteDraft) {
+                        this.noteDraft = this.notes.text || '';
+                    }
+                }
+            },
+            updateSelectedLanguage(value) {
+                const normalized = this.normalizeLanguage(value) || 'auto';
+                this.selectedLanguage = normalized;
+                this.languageSelectionDirty = true;
+                if (this.record) {
+                    this.record.transcript_language = normalized;
+                }
+                this.languageOptions = this.buildLanguageOptions();
+            },
+            buildLanguageOptions() {
+                const seen = new Set();
+                const order = [];
+                const push = (input) => {
+                    const normalized = this.normalizeLanguage(input);
+                    if (!normalized) {
+                        return;
+                    }
+                    if (seen.has(normalized)) {
+                        return;
+                    }
+                    seen.add(normalized);
+                    order.push(normalized);
+                };
+                push('auto');
+                const defaults = ['en', 'zh', 'yue', 'ja', 'ko'];
+                defaults.forEach(push);
+                const capabilityLanguages = this.transcriptCapabilities?.sensevoice_cli?.languages;
+                if (Array.isArray(capabilityLanguages)) {
+                    capabilityLanguages.forEach(push);
+                }
+                push(this.record?.transcript_language);
+                push(this.transcript?.language);
+                push(this.selectedLanguage);
+                return order.map((value) => ({
+                    value,
+                    label: this.languageLabel(value),
+                }));
+            },
+            normalizeLanguage(value) {
+                if (value === null || value === undefined) {
+                    return '';
+                }
+                if (typeof value === 'object') {
+                    return '';
+                }
+                const text = String(value).trim();
+                if (!text) {
+                    return '';
+                }
+                return text.toLowerCase();
+            },
+            languageLabel(value) {
+                const normalized = this.normalizeLanguage(value);
+                if (!normalized) {
+                    return '—';
+                }
+                const labels = {
+                    auto: 'Auto detect',
+                    en: 'English (en)',
+                    zh: 'Chinese (zh)',
+                    yue: 'Cantonese (yue)',
+                    ja: 'Japanese (ja)',
+                    ko: 'Korean (ko)',
+                    es: 'Spanish (es)',
+                    fr: 'French (fr)',
+                    de: 'German (de)',
+                    pt: 'Portuguese (pt)',
+                    ru: 'Russian (ru)',
+                    vi: 'Vietnamese (vi)',
+                    th: 'Thai (th)',
+                    id: 'Indonesian (id)',
+                };
+                if (labels[normalized]) {
+                    return labels[normalized];
+                }
+                return normalized.toUpperCase();
+            },
+            transcriptGeneratedLabel() {
+                if (!(this.transcript?.available || this.transcriptVisible)) {
+                    return 'Request on demand to analyse conversation outcome.';
+                }
+                const formatted = this.formatGeneratedTimestamp(this.transcript?.generated_at);
+                if (formatted) {
+                    return formatted;
+                }
+                return 'Transcript ready.';
+            },
+            canRequestTranscript() {
+                const capability = this.transcriptCapabilities && this.transcriptCapabilities.sensevoice_cli;
+                if (capability && capability.ready) {
+                    return true;
+                }
+                return Boolean(this.record && this.record.has_transcript);
+            },
+            transcriptCapabilityIssues() {
+                const capability = this.transcriptCapabilities && this.transcriptCapabilities.sensevoice_cli;
+                if (!capability) {
+                    return [];
+                }
+                if (Array.isArray(capability.missing)) {
+                    return capability.missing;
+                }
+                return [];
+            },
+            transcriptTimeline() {
+                const segments = Array.isArray(this.transcript?.segments) ? this.transcript.segments : [];
+                if (!segments.length) {
+                    return [];
+                }
+                const enriched = segments.map((segment, index) => {
+                    const startValue = Number(segment?.start);
+                    const endValue = Number(segment?.end);
+                    const rawChannel = segment ? segment.channel : null;
+                    let channelKey = 'mono';
+                    if (rawChannel !== null && rawChannel !== undefined && rawChannel !== '') {
+                        const numericChannel = Number(rawChannel);
+                        channelKey = Number.isFinite(numericChannel) ? numericChannel : 'mono';
+                    }
+                    let side = 'mono';
+                    if (channelKey !== 'mono') {
+                        const numeric = Number(channelKey);
+                        if (Number.isFinite(numeric)) {
+                            if (numeric === 0) {
+                                side = 'left';
+                            } else if (numeric === 1) {
+                                side = 'right';
+                            } else {
+                                side = numeric % 2 === 0 ? 'left' : 'right';
+                            }
+                        }
+                    }
+                    const label = segment?.speaker || this.channelLabel(channelKey);
+                    const start = Number.isFinite(startValue) ? startValue : null;
+                    const end = Number.isFinite(endValue) ? endValue : null;
+                    return {
+                        key: `timeline-${index}-${segment?.idx ?? index}-${start ?? ''}`,
+                        segment,
+                        side,
+                        label,
+                        start,
+                        end,
+                    };
+                });
+                enriched.sort((a, b) => {
+                    if (a.start === null && b.start === null) {
+                        return 0;
+                    }
+                    if (a.start === null) {
+                        return 1;
+                    }
+                    if (b.start === null) {
+                        return -1;
+                    }
+                    if (a.start === b.start) {
+                        return 0;
+                    }
+                    return a.start - b.start;
+                });
+                return enriched;
+            },
+            transcriptAlignmentClass(side) {
+                if (side === 'right') {
+                    return 'justify-end';
+                }
+                if (side === 'mono') {
+                    return 'justify-center';
+                }
+                return 'justify-start';
+            },
+            transcriptCardTone(side) {
+                if (side === 'right') {
+                    return 'border-emerald-200 bg-emerald-50/80';
+                }
+                if (side === 'left') {
+                    return 'border-sky-200 bg-sky-50/80';
+                }
+                return 'border-slate-200 bg-white/90';
+            },
+            channelLabel(key) {
+                if (key === 'mono' || key === null || key === undefined) {
+                    return 'Mono channel';
+                }
+                const numeric = Number(key);
+                if (!Number.isFinite(numeric)) {
+                    return `Channel ${key}`;
+                }
+                if (numeric === 0) {
+                    return 'Left channel';
+                }
+                if (numeric === 1) {
+                    return 'Right channel';
+                }
+                return `Channel ${numeric + 1}`;
+            },
+            formatSegmentTimestamp(value) {
+                if (value === undefined || value === null) {
+                    return '';
+                }
+                const numeric = Number(value);
+                if (!Number.isFinite(numeric)) {
+                    return String(value);
+                }
+                return `${numeric.toFixed(1)}s`;
+            },
+            formatSegmentRange(start, end) {
+                const startText = this.formatSegmentTimestamp(start);
+                const endText = this.formatSegmentTimestamp(end);
+                const hasStart = Boolean(startText);
+                const hasEnd = end !== undefined && end !== null && end !== '' && Boolean(endText);
+                if (hasStart && hasEnd) {
+                    if (startText === endText) {
+                        return startText;
+                    }
+                    return `${startText} → ${endText}`;
+                }
+                if (!hasStart && hasEnd) {
+                    return endText;
+                }
+                return startText;
+            },
+            async requestTranscript(force = false) {
+                if (!this.transcriptUrl) {
+                    this.transcriptError = 'Transcript endpoint unavailable.';
+                    return;
+                }
+                if (this.asrProcessing || this.transcriptLoading) {
+                    return;
+                }
+                if (!force && this.record?.has_transcript && !this.transcriptVisible) {
+                    await this.fetchTranscript();
+                    return;
+                }
+                if (!force && this.transcriptStatus === 'processing') {
+                    await this.fetchTranscript();
+                    return;
+                }
+                this.asrProcessing = true;
+                this.transcriptError = null;
+                this.transcriptStatus = 'processing';
+                if (this.record) {
+                    this.record.transcript_status = 'processing';
+                }
+                const payload = {};
+                if (force) {
+                    payload.force = true;
+                }
+                let selectedLanguage = this.normalizeLanguage(this.selectedLanguage);
+                if (!selectedLanguage) {
+                    selectedLanguage = this.normalizeLanguage(
+                        this.record?.transcript_language || this.transcript?.language,
+                    );
+                }
+                if (selectedLanguage && selectedLanguage !== 'auto') {
+                    payload.language = selectedLanguage;
+                }
+                try {
+                    const response = await fetch(this.transcriptUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                        },
+                        body: JSON.stringify(payload),
+                    });
+                    if (!response.ok) {
+                        this.transcriptError = await this.extractErrorMessage(response);
+                        if (response.status === 409) {
+                            await this.fetchTranscript();
+                        }
+                        return;
+                    }
+                    const data = await response.json();
+                    this.applyTranscriptPayload(data);
+                    if (data && data.transcript) {
+                        this.transcriptPreview = data.transcript;
+                    }
+                } catch (err) {
+                    console.error('Failed to request transcript', err);
+                    this.transcriptError = 'Failed to request transcription';
+                } finally {
+                    this.asrProcessing = false;
+                }
+            },
+
+            async updateRecord(update) {
+                if (!update || typeof update !== 'object') {
+                    throw new Error('No update payload provided.');
+                }
+                if (!this.updateUrl) {
+                    throw new Error('Update endpoint unavailable.');
+                }
+                try {
+                    const response = await fetch(this.updateUrl, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                        },
+                        body: JSON.stringify(update),
+                    });
+                    if (!response.ok) {
+                        throw new Error(await this.extractErrorMessage(response));
+                    }
+                    return await response.json();
+                } catch (err) {
+                    if (err instanceof Error) {
+                        throw err;
+                    }
+                    throw new Error('Failed to update call record');
+                }
+            },
+            async extractErrorMessage(response) {
+                let fallback = `Request failed (${response.status})`;
+                const type = response.headers.get('content-type') || '';
+                if (type.includes('application/json')) {
+                    try {
+                        const data = await response.json();
+                        if (data && typeof data === 'object' && data.message) {
+                            return data.message;
+                        }
+                        if (data && typeof data === 'string') {
+                            return data;
+                        }
+                    } catch (err) {
+                        return fallback;
+                    }
+                    return fallback;
+                }
+                try {
+                    const text = await response.text();
+                    if (text) {
+                        return text;
+                    }
+                } catch (err) {
+                    return fallback;
+                }
+                return fallback;
+            },
+
+            determineRecordUrl(recordId) {
+                if (!recordId) {
+                    return '';
+                }
+                const base = this.normalizeConsoleUrl(this.backUrl || '/console/call-records');
+                const trimmed = base.endsWith('/') ? base.slice(0, -1) : base;
+                return this.normalizeConsoleUrl(`${trimmed}/${encodeURIComponent(recordId)}`);
+            },
+            normalizeConsoleUrl(value) {
+                const candidate = (value || '').toString().trim();
+                if (!candidate) {
+                    return '';
+                }
+                if (candidate.startsWith('http://') || candidate.startsWith('https://')) {
+                    try {
+                        const parsed = new URL(candidate, window.location.origin);
+                        return parsed.pathname + parsed.search;
+                    } catch (err) {
+                        return candidate;
+                    }
+                }
+                return candidate.startsWith('/') ? candidate : `/${candidate}`;
+            },
+            selectSipEntry(entry) {
+                if (!entry) {
+                    this.selectedSipEntry = null;
+                    return;
+                }
+                if (this.selectedSipEntry && this.selectedSipEntry.sequence === entry.sequence) {
+                    this.selectedSipEntry = null;
+                } else {
+                    this.selectedSipEntry = entry;
+                }
+            },
+            laneCell(entry, columnId) {
+                if (!entry || !columnId) {
+                    return 'none';
+                }
+                const target = this.normalizeLaneId(columnId);
+                if (!target) {
+                    return 'none';
+                }
+                const laneFrom = this.normalizeLaneId(entry.lane_from);
+                const laneTo = this.normalizeLaneId(entry.lane_to);
+                if (laneFrom === target && laneTo === target) {
+                    return 'self';
+                }
+                if (laneFrom === target) {
+                    return 'from';
+                }
+                if (laneTo === target) {
+                    return 'to';
+                }
+                return 'none';
+            },
+            lanePosition(laneId) {
+                switch (this.normalizeLaneId(laneId)) {
+                    case 'caller':
+                        return 0;
+                    case 'pbx':
+                        return 1;
+                    case 'callee':
+                        return 2;
+                    default:
+                        return 1;
+                }
+            },
+            cellArrow(entry, columnId) {
+                if (!entry || !columnId) {
+                    return '';
+                }
+                const cellType = this.laneCell(entry, columnId);
+                if (cellType !== 'from' && cellType !== 'to') {
+                    return '';
+                }
+                const fromLane = this.normalizeLaneId(entry.lane_from);
+                const toLane = this.normalizeLaneId(entry.lane_to);
+                if (!fromLane || !toLane || fromLane === toLane) {
+                    return '';
+                }
+                return this.lanePosition(toLane) > this.lanePosition(fromLane) ? '→' : '←';
+            },
+            arrowPlacement(entry, columnId, cellType) {
+                const arrow = this.cellArrow(entry, columnId);
+                if (!arrow) {
+                    return 'none';
+                }
+                const lane = this.normalizeLaneId(columnId);
+                if (cellType === 'from') {
+                    if (lane === 'callee' && arrow === '←') {
+                        return 'right';
+                    }
+                    return arrow === '→' ? 'right' : 'left';
+                }
+                if (cellType === 'to') {
+                    return arrow === '→' ? 'right' : 'left';
+                }
+                return 'none';
+            },
+            laneContentClass(entry, columnId) {
+                const lane = this.normalizeLaneId(columnId);
+                const cellType = this.laneCell(entry, columnId);
+                if (lane === 'callee') {
+                    if (cellType === 'to') {
+                        return 'justify-end text-right';
+                    }
+                    if (cellType === 'from') {
+                        return 'text-left';
+                    }
+                }
+                if (cellType === 'to') {
+                    return 'justify-end text-right';
+                }
+                if (cellType === 'from') {
+                    return 'text-left';
+                }
+                return 'text-left';
+            },
+            normalizeLaneId(value) {
+                const normalized = (value || '').toString().trim().toLowerCase();
+                if (!normalized) {
+                    return '';
+                }
+                switch (normalized) {
+                    case 'pbx':
+                    case 'proxy':
+                    case 'server':
+                    case 'sip_server':
+                    case 'b2bua':
+                        return 'pbx';
+                    case 'caller':
+                    case 'source':
+                    case 'src':
+                        return 'caller';
+                    case 'callee':
+                    case 'destination':
+                    case 'dst':
+                        return 'callee';
+                    case 'time':
+                    case 'timestamp':
+                        return 'time';
+                    default:
+                        return normalized;
+                }
+            },
+            parseTimestamp(value) {
+                if (!value) {
+                    return NaN;
+                }
+                let numeric = Number(value);
+                if (!Number.isNaN(numeric)) {
+                    // Check for microseconds (often > 10^14)
+                    if (numeric > 100000000000000) {
+                        return numeric / 1000;
+                    }
+                    return numeric;
+                }
+                const date = new Date(value);
+                if (!Number.isNaN(date.getTime())) {
+                    return date.getTime();
+                }
+                const parsed = Date.parse(value);
+                return Number.isNaN(parsed) ? NaN : parsed;
+            },
+            formatRelativeToStart(entry) {
+                if (!entry) {
+                    return '—';
+                }
+                const timestamp = this.parseTimestamp(entry.timestamp);
+                if (!Number.isFinite(timestamp)) {
+                    return entry.offset || '—';
+                }
+                if (!Number.isFinite(this.flowStartEpoch)) {
+                    return entry.offset || '—';
+                }
+                return this.formatDiffWithMs(timestamp - this.flowStartEpoch);
+            },
+            formatDiffWithMs(diffMs) {
+                if (!Number.isFinite(diffMs)) {
+                    return '—';
+                }
+                const sign = diffMs < 0 ? '-' : '+';
+                const abs = Math.abs(diffMs);
+                const totalSeconds = Math.floor(abs / 1000);
+                const milliseconds = abs % 1000;
+                const hours = Math.floor(totalSeconds / 3600);
+                const minutes = Math.floor((totalSeconds % 3600) / 60);
+                const seconds = totalSeconds % 60;
+                const pad = (num, len = 2) => String(num).padStart(len, '0');
+                const base = hours > 0
+                    ? `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+                    : `${pad(minutes)}:${pad(seconds)}`;
+                return `${sign}${base}.${pad(milliseconds, 3)}`;
+            },
+            formatDateTimeWithMs(value) {
+                const timestamp = this.parseTimestamp(value);
+                if (!Number.isFinite(timestamp)) {
+                    return value || '—';
+                }
+                const date = new Date(timestamp);
+                const pad = (num, len = 2) => String(num).padStart(len, '0');
+                const hours = pad(date.getHours());
+                const minutes = pad(date.getMinutes());
+                const seconds = pad(date.getSeconds());
+                const milliseconds = pad(date.getMilliseconds(), 3);
+                return `${hours}:${minutes}:${seconds}.${milliseconds}`;
+            },
+            getSipInfoClass(value) {
+                const original = (value || '').toString().trim();
+                if (!original) return 'text-slate-500';
+                const firstLine = original.split('\n')[0].trim();
+
+                // Response
+                if (firstLine.startsWith('SIP/2.0')) {
+                    const parts = firstLine.split(' ');
+                    if (parts.length >= 2) {
+                        const code = Number(parts[1]);
+                        if (code >= 100 && code < 200) return 'text-slate-500'; // 1xx
+                        if (code >= 200 && code < 300) return 'text-emerald-600'; // 2xx
+                        if (code >= 300 && code < 400) return 'text-sky-600'; // 3xx
+                        if (code >= 400) return 'text-rose-600'; // 4xx/5xx/6xx
+                    }
+                    return 'text-slate-500';
+                }
+
+                // Request
+                return 'text-indigo-600';
+            },
+            formatSipSummary(value) {
+                const original = (value || '').toString().trim();
+                if (!original) {
+                    return '—';
+                }
+                const firstLine = original.split('\n')[0].trim();
+                // If it's a response (starts with SIP/2.0), show status code and reason
+                if (firstLine.startsWith('SIP/2.0')) {
+                    const parts = firstLine.split(' ');
+                    if (parts.length >= 3) {
+                        return parts.slice(1).join(' '); // "200 OK"
+                    }
+                    return firstLine;
+                }
+                // If it's a request, show method
+                const method = firstLine.split(' ')[0];
+                return method;
+            },
+            formatSummary(value) {
+                const original = (value || '').toString().trim();
+                if (!original) {
+                    return '—';
+                }
+                const compact = original
+                    .replace(/sips?:[^\s>]+/gi, '')
+                    .replace(/<[^>]*>/g, '')
+                    .replace(/"[^"\\]*"/g, '')
+                    .replace(/\bSIP\/2\.0\b/gi, '')
+                    .replace(/\bOK\b/gi, '')
+                    .replace(/\s{2,}/g, ' ')
+                    .trim();
+                if (!compact) {
+                    const firstToken = original.split(/\s+/)[0];
+                    return firstToken || '—';
+                }
+                return compact.length > 60 ? `${compact.slice(0, 57)}…` : compact;
+            },
+            isB2bua(entry) {
+                if (!entry || !entry.leg_role) {
+                    return false;
+                }
+                return entry.leg_role.toLowerCase() === 'b2bua';
+            },
+            async copyCallId(callId) {
+                if (!callId) {
+                    return;
+                }
+                const text = String(callId);
+                let ok = await this.tryClipboardWrite(text);
+                if (!ok) {
+                    ok = this.copyCallIdFallback(text);
+                }
+                if (ok) {
+                    this.showCopyConfirmation(text);
+                }
+            },
+            async tryClipboardWrite(text) {
+                if (typeof navigator === 'undefined' || !navigator.clipboard || !navigator.clipboard.writeText) {
+                    return false;
+                }
+                try {
+                    await navigator.clipboard.writeText(text);
+                    return true;
+                } catch (err) {
+                    console.error('Clipboard API failed', err);
+                    return false;
+                }
+            },
+            copyCallIdFallback(text) {
+                try {
+                    const temp = document.createElement('textarea');
+                    temp.value = text;
+                    temp.setAttribute('readonly', '');
+                    temp.style.position = 'fixed';
+                    temp.style.opacity = '0';
+                    document.body.appendChild(temp);
+                    temp.select();
+                    temp.setSelectionRange(0, temp.value.length);
+                    const success = document.execCommand('copy');
+                    document.body.removeChild(temp);
+                    return success;
+                } catch (err) {
+                    console.error('Copy fallback failed', err);
+                    return false;
+                }
+            },
+            showCopyConfirmation(value) {
+                this.copiedCallId = value;
+                if (this.copyTimer) {
+                    clearTimeout(this.copyTimer);
+                }
+                this.copyTimer = setTimeout(() => {
+                    this.copiedCallId = null;
+                    this.copyTimer = null;
+                }, 1500);
+            },
+            waveformChannelHeight() {
+                if (typeof window === 'undefined') {
+                    return 36;
+                }
+                if (window.innerWidth >= 1280) {
+                    return 48;
+                }
+                if (window.innerWidth >= 768) {
+                    return 42;
+                }
+                return 36;
+            },
+            prepareWaveform(attempt) {
+                const tries = Number(attempt) || 0;
+                if (!this.record || !this.record.recording || !this.record.recording.url) {
+                    return;
+                }
+                if (this.waveSurfer || this.waveformLoading) {
+                    return;
+                }
+                const canvas = this.$refs.waveformCanvas;
+                if (!canvas) {
+                    if (tries > 10) {
+                        return;
+                    }
+                    const retry = () => this.prepareWaveform(tries + 1);
+                    if (typeof requestAnimationFrame === 'function') {
+                        requestAnimationFrame(retry);
+                    } else {
+                        setTimeout(retry, 100);
+                    }
+                    return;
+                }
+                if (typeof window === 'undefined' || !window.WaveSurfer) {
+                    if (tries > 30) {
+                        this.waveformError = 'Waveform renderer failed to load.';
+                        return;
+                    }
+                    setTimeout(() => this.prepareWaveform(tries + 1), 150);
+                    return;
+                }
+                this.waveformError = '';
+                this.mountWaveSurfer(canvas);
+            },
+            mountWaveSurfer(container) {
+                this.destroyWaveform();
+                if (!container || typeof window === 'undefined' || !window.WaveSurfer) {
+                    this.waveformError = 'Waveform renderer unavailable.';
+                    return;
+                }
+                this.waveformLoading = true;
+                this.waveformReady = false;
+                this.waveformPlaying = false;
+                this.waveformPosition = 0;
+                try {
+                    const channelHeight = this.waveformChannelHeight();
+                    this.waveSurfer = window.WaveSurfer.create({
+                        container,
+                        height: channelHeight,
+                        backend: 'WebAudio',
+                        fillParent: true,
+                        responsive: true,
+                        normalize: true,
+                        splitChannels: true,
+                        waveColor: '#c7d2fe',
+                        progressColor: '#0ea5e9',
+                        cursorColor: '#475569',
+                        cursorWidth: 1,
+                        barWidth: 2,
+                        barGap: 1,
+                        barRadius: 2,
+                        autoCenter: true,
+                        interact: true,
+                        minPxPerSec: 40,
+                    });
+                } catch (err) {
+                    console.error('Failed to create WaveSurfer instance', err);
+                    this.waveformError = 'Failed to initialize waveform.';
+                    this.waveformLoading = false;
+                    return;
+                }
+                this.waveSurfer.load(this.record.recording.url);
+                const updatePosition = (value) => {
+                    if (!Number.isFinite(value)) {
+                        return;
+                    }
+                    this.waveformPosition = value;
+                };
+                this.waveSurfer.on('ready', () => {
+                    this.waveformReady = true;
+                    this.waveformLoading = false;
+                    const duration = this.waveSurfer && this.waveSurfer.getDuration
+                        ? this.waveSurfer.getDuration()
+                        : null;
+                    if (Number.isFinite(duration) && duration > 0) {
+                        this.waveformDuration = duration;
+                    }
+                    const decoded = this.waveSurfer && this.waveSurfer.getDecodedData
+                        ? this.waveSurfer.getDecodedData()
+                        : null;
+                    if (decoded && !this.waveformOriginalBuffer) {
+                        this.waveformOriginalBuffer = decoded;
+                    }
+                    if (decoded && !this.areAllWaveformChannelsActive()) {
+                        this.applyWaveformChannelMix();
+                    }
+                });
+                this.waveSurfer.on('error', (err) => {
+                    console.error('WaveSurfer error', err);
+                    this.waveformError = (err && err.toString()) || 'Waveform rendering failed.';
+                    this.waveformLoading = false;
+                    this.waveformReady = false;
+                    this.waveformPlaying = false;
+                    this.waveformOriginalBuffer = null;
+                    if (this.waveSurfer) {
+                        try {
+                            this.waveSurfer.destroy();
+                        } catch (destroyErr) {
+                            console.warn('WaveSurfer destroy after error failed', destroyErr);
+                        }
+                        this.waveSurfer = null;
+                    }
+                });
+                this.waveSurfer.on('play', () => {
+                    this.waveformPlaying = true;
+                });
+                this.waveSurfer.on('pause', () => {
+                    this.waveformPlaying = false;
+                });
+                this.waveSurfer.on('finish', () => {
+                    this.waveformPlaying = false;
+                    this.waveformPosition = this.waveformDuration;
+                });
+                this.waveSurfer.on('seek', (progress) => {
+                    const duration = (this.waveSurfer && this.waveSurfer.getDuration
+                        ? this.waveSurfer.getDuration()
+                        : this.waveformDuration) || 0;
+                    updatePosition(progress * duration);
+                });
+                this.waveSurfer.on('audioprocess', updatePosition);
+            },
+            destroyWaveform() {
+                if (this.waveSurfer) {
+                    try {
+                        this.waveSurfer.destroy();
+                    } catch (err) {
+                        console.warn('WaveSurfer destroy failed', err);
+                    }
+                }
+                this.waveSurfer = null;
+                this.waveformReady = false;
+                this.waveformLoading = false;
+                this.waveformPlaying = false;
+                this.waveformPosition = 0;
+                if (this.$refs.waveformCanvas) {
+                    this.$refs.waveformCanvas.innerHTML = '';
+                }
+                this.waveformOriginalBuffer = null;
+            },
+            toggleWaveformPlayback() {
+                if (!this.waveSurfer && !this.waveformLoading && this.record && this.record.recording && this.record.recording.url) {
+                    this.prepareWaveform();
+                }
+                if (this.waveSurfer && this.waveformReady) {
+                    this.waveSurfer.playPause();
+                    return;
+                }
+                if (this.$refs.waveformFallbackAudio) {
+                    const audio = this.$refs.waveformFallbackAudio;
+                    if (audio.paused) {
+                        audio.play().catch(() => { });
+                    } else {
+                        audio.pause();
+                    }
+                }
+            },
+            stopWaveform() {
+                if (this.waveSurfer) {
+                    this.waveSurfer.stop();
+                    this.waveformPlaying = false;
+                    this.waveformPosition = 0;
+                } else if (this.$refs.waveformFallbackAudio) {
+                    const audio = this.$refs.waveformFallbackAudio;
+                    audio.pause();
+                    audio.currentTime = 0;
+                }
+            },
+            toggleWaveformChannel(side) {
+                if (side !== 'left' && side !== 'right') {
+                    return;
+                }
+                const other = side === 'left' ? 'right' : 'left';
+                const nextState = !this.waveformChannels[side];
+                if (!nextState && !this.waveformChannels[other]) {
+                    return;
+                }
+                this.waveformChannels[side] = nextState;
+                if (this.waveSurfer && this.waveformReady) {
+                    this.applyWaveformChannelMix();
+                }
+            },
+            applyWaveformChannelMix() {
+                if (!this.waveSurfer || !this.waveformReady || !this.waveformOriginalBuffer) {
+                    return;
+                }
+                const targetBuffer = this.areAllWaveformChannelsActive()
+                    ? this.waveformOriginalBuffer
+                    : this.buildChannelBuffer(this.waveformOriginalBuffer, this.waveformChannels);
+                if (!targetBuffer) {
+                    return;
+                }
+                const media = this.waveSurfer.media;
+                if (!media) {
+                    return;
+                }
+                const wasPlaying = this.waveSurfer.isPlaying();
+                const currentTime = this.waveSurfer.getCurrentTime();
+                if (wasPlaying) {
+                    this.waveSurfer.pause();
+                }
+                media.buffer = targetBuffer;
+                this.waveSurfer.decodedData = targetBuffer;
+                if (this.waveSurfer.renderer && this.waveSurfer.renderer.render) {
+                    this.waveSurfer.renderer.render(targetBuffer);
+                }
+                const safeTime = Math.min(Math.max(currentTime, 0), targetBuffer.duration || this.waveformDuration || 0);
+                this.waveSurfer.setTime(safeTime);
+                this.waveformDuration = targetBuffer.duration || this.waveformDuration;
+                this.waveformPosition = safeTime;
+                if (wasPlaying) {
+                    this.waveSurfer.play();
+                }
+            },
+            buildChannelBuffer(sourceBuffer, state = this.waveformChannels) {
+                if (!sourceBuffer) {
+                    return null;
+                }
+                const audioContext = this.waveSurfer && this.waveSurfer.media && this.waveSurfer.media.audioContext;
+                if (!audioContext || typeof audioContext.createBuffer !== 'function') {
+                    return null;
+                }
+                const channels = sourceBuffer.numberOfChannels || 1;
+                const buffer = audioContext.createBuffer(channels, sourceBuffer.length, sourceBuffer.sampleRate);
+                for (let index = 0; index < channels; index += 1) {
+                    const target = buffer.getChannelData(index);
+                    const source = sourceBuffer.getChannelData(index);
+                    const shouldCopy = (index === 0 && state.left !== false)
+                        || (index === 1 && state.right !== false)
+                        || index > 1;
+                    if (shouldCopy) {
+                        target.set(source);
+                    } else {
+                        target.fill(0);
+                    }
+                }
+                return buffer;
+            },
+            areAllWaveformChannelsActive() {
+                return this.waveformChannels.left !== false && this.waveformChannels.right !== false;
+            },
+            statusLabel(value) {
+                switch ((value || '').toLowerCase()) {
+                    case 'completed':
+                        return 'Completed';
+                    case 'missed':
+                        return 'Missed';
+                    case 'failed':
+                        return 'Failed';
+                    default:
+                        return value || 'Unknown';
+                }
+            },
+            directionLabel(value) {
+                switch ((value || '').toLowerCase()) {
+                    case 'inbound':
+                        return 'Inbound';
+                    case 'outbound':
+                        return 'Outbound';
+                    case 'internal':
+                        return 'Internal';
+                    default:
+                        return value || 'Unknown';
+                }
+            },
+            billingStatusLabel(value) {
+                switch ((value || '').toLowerCase()) {
+                    case 'charged':
+                        return 'Charged';
+                    case 'included':
+                        return 'Included';
+                    case 'zero-duration':
+                        return 'Zero duration';
+                    case 'unrated':
+                        return 'Unrated';
+                    default:
+                        return value || 'Unknown';
+                }
+            },
+            statusClasses(status) {
+                switch ((status || '').toLowerCase()) {
+                    case 'completed':
+                        return 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200';
+                    case 'missed':
+                        return 'bg-amber-50 text-amber-600 ring-1 ring-amber-200';
+                    case 'failed':
+                        return 'bg-rose-50 text-rose-600 ring-1 ring-rose-200';
+                    default:
+                        return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200';
+                }
+            },
+            billingStatusClasses(status) {
+                switch ((status || '').toLowerCase()) {
+                    case 'charged':
+                        return 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200';
+                    case 'included':
+                        return 'bg-sky-50 text-sky-600 ring-1 ring-sky-200';
+                    case 'zero-duration':
+                        return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200';
+                    case 'unrated':
+                        return 'bg-amber-50 text-amber-600 ring-1 ring-amber-200';
+                    default:
+                        return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200';
+                }
+            },
+            statusDot(status) {
+                switch ((status || '').toLowerCase()) {
+                    case 'completed':
+                        return 'bg-emerald-500';
+                    case 'missed':
+                        return 'bg-amber-500';
+                    case 'failed':
+                        return 'bg-rose-500';
+                    default:
+                        return 'bg-slate-400';
+                }
+            },
+            directionClasses(direction) {
+                switch ((direction || '').toLowerCase()) {
+                    case 'inbound':
+                        return 'border border-sky-100 bg-sky-50 text-sky-700';
+                    case 'outbound':
+                        return 'border border-emerald-100 bg-emerald-50 text-emerald-700';
+                    case 'internal':
+                        return 'border border-slate-200 bg-slate-50 text-slate-700';
+                    default:
+                        return 'border border-slate-200 bg-slate-50 text-slate-700';
+                }
+            },
+            statusReasonLabel(code) {
+                const lookup = {
+                    0: 'Unspecified error',
+                    400: 'Bad request',
+                    401: 'Unauthorized',
+                    402: 'Payment required',
+                    403: 'Forbidden',
+                    404: 'Not found',
+                    405: 'Method not allowed',
+                    407: 'Proxy auth required',
+                    408: 'Request timeout',
+                    410: 'Gone',
+                    413: 'Request entity too large',
+                    415: 'Unsupported media',
+                    416: 'Unsupported URI scheme',
+                    420: 'Bad extension',
+                    423: 'Interval too brief',
+                    480: 'Temporarily unavailable',
+                    481: 'Call leg/transaction does not exist',
+                    482: 'Loop detected',
+                    483: 'Too many hops',
+                    484: 'Address incomplete',
+                    485: 'Ambiguous',
+                    486: 'Busy here',
+                    487: 'Request terminated',
+                    488: 'Not acceptable here',
+                    489: 'Bad event',
+                    491: 'Request pending',
+                    493: 'Undecipherable',
+                    500: 'Server internal error',
+                    501: 'Not implemented',
+                    502: 'Bad gateway',
+                    503: 'Service unavailable',
+                    504: 'Gateway timeout',
+                    505: 'SIP version not supported',
+                    580: 'Precondition failure',
+                    600: 'Busy everywhere',
+                    603: 'Declined',
+                    604: 'Does not exist anywhere',
+                    606: 'Not acceptable',
+                };
+                const normalized = Number(code) || 0;
+                return lookup[normalized] || 'SIP error';
+            },
+            hangupTargetLabel(target) {
+                if (!target) {
+                    return 'Endpoint';
+                }
+                const normalized = String(target).toLowerCase();
+                if (normalized === 'caller') {
+                    return 'Caller leg';
+                }
+                if (normalized === 'callee') {
+                    return 'Callee leg';
+                }
+                if (normalized === 'b2bua') {
+                    return 'B2BUA leg';
+                }
+                return target;
+            },
+            formatCurrency(amount, currency) {
+                if (amount === null || amount === undefined) {
+                    return '—';
+                }
+                const numeric = Number(amount);
+                if (!Number.isFinite(numeric)) {
+                    return '—';
+                }
+                const symbol = (currency || 'USD').toString().trim().toUpperCase() || 'USD';
+                return `${symbol} ${numeric.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                })}`;
+            },
+            formatBillingAmount(billing) {
+                if (!billing || typeof billing !== 'object') {
+                    return '—';
+                }
+                const status = (billing.status || '').toLowerCase();
+                const amount = billing.amount || {};
+                const total = amount.total ?? amount.subtotal ?? null;
+                if (total !== null && total !== undefined) {
+                    return this.formatCurrency(total, billing.currency || (this.billing?.summary?.currency) || 'USD');
+                }
+                if (status === 'included') {
+                    return 'Included';
+                }
+                if (status === 'zero-duration') {
+                    return '0.00';
+                }
+                if (status === 'unrated') {
+                    return 'Unrated';
+                }
+                return '—';
+            },
+            formatBillingMinutes(billing) {
+                if (!billing || typeof billing !== 'object') {
+                    return '—';
+                }
+                const minutes = billing.billable_minutes !== undefined
+                    ? Number(billing.billable_minutes)
+                    : (typeof billing.billable_secs === 'number'
+                        ? Number(billing.billable_secs) / 60.0
+                        : NaN);
+                if (!Number.isFinite(minutes) || minutes <= 0) {
+                    return '—';
+                }
+                return `${minutes.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                })} min`;
+            },
+            qualityTone(value) {
+                const mos = Number(value || 0);
+                if (mos >= 4.3) {
+                    return 'text-emerald-600';
+                }
+                if (mos >= 3.8) {
+                    return 'text-amber-600';
+                }
+                if (mos > 0) {
+                    return 'text-rose-600';
+                }
+                return 'text-slate-400';
+            },
+
+            formatNumber(value) {
+                if (value === null || value === undefined || Number.isNaN(Number(value))) {
+                    return '—';
+                }
+                return Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
+            },
+            formatWaveformTimestamp(value) {
+                if (value === null || value === undefined) {
+                    return '00:00.0';
+                }
+                const numeric = Number(value);
+                if (!Number.isFinite(numeric) || numeric < 0) {
+                    return '00:00.0';
+                }
+                const hours = Math.floor(numeric / 3600);
+                const minutes = Math.floor((numeric % 3600) / 60);
+                const seconds = Math.floor(numeric % 60);
+                const tenths = Math.floor((numeric % 1) * 10);
+                const pad = (num) => String(num).padStart(2, '0');
+                if (hours > 0) {
+                    return `${hours}:${pad(minutes)}:${pad(seconds)}.${tenths}`;
+                }
+                return `${minutes}:${pad(seconds)}.${tenths}`;
+            },
+            formatDuration(value) {
+                const seconds = Number(value || 0);
+                if (!seconds) {
+                    return '00:00';
+                }
+                const hours = Math.floor(seconds / 3600);
+                const minutes = Math.floor((seconds % 3600) / 60);
+                const secs = Math.floor(seconds % 60);
+                const pad = (num) => String(num).padStart(2, '0');
+                if (hours > 0) {
+                    return `${pad(hours)}:${pad(minutes)}:${pad(secs)}`;
+                }
+                return `${pad(minutes)}:${pad(secs)}`;
+            },
+            formatGeneratedTimestamp(value) {
+                if (!value) {
+                    return '';
+                }
+                const formatted = this.formatDateTime(value);
+                if (!formatted || formatted === '—') {
+                    return '';
+                }
+                return `Generated ${formatted}`;
+            },
+            formatDateTime(value) {
+                if (!value) {
+                    return '—';
+                }
+                try {
+                    let input = value;
+                    if (typeof input === 'string') {
+                        input = input.trim();
+                    }
+                    if (!input) {
+                        return '—';
+                    }
+                    let date = new Date(input);
+                    if (Number.isNaN(date.getTime()) && typeof input === 'string') {
+                        const normalized = input.replace(
+                            /(T\d{2}:\d{2}:\d{2}\.)(\d+)(Z|[+-]\d{2}:\d{2})$/,
+                            (_, prefix, fraction, suffix) => `${prefix}${fraction.slice(0, 3)}${suffix}`,
+                        );
+                        if (normalized !== input) {
+                            date = new Date(normalized);
+                        }
+                    }
+                    if (Number.isNaN(date.getTime())) {
+                        return typeof input === 'string' ? input : '—';
+                    }
+                    return new Intl.DateTimeFormat(undefined, {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false,
+                    }).format(date);
+                } catch (err) {
+                    if (typeof value === 'string') {
+                        return value;
+                    }
+                    return '—';
+                }
+            },
+            formatJson(value) {
+                if (!value) {
+                    return '—';
+                }
+                try {
+                    return JSON.stringify(value, null, 2);
+                } catch (err) {
+                    return String(value);
+                }
+            },
+            async fetchSipFlow() {
+                if (!this.actions.download_sip_flow) return;
+                this.sipFlowLoading = true;
+                try {
+                    const response = await fetch(this.actions.download_sip_flow);
+                    if (!response.ok) return;
+                    const data = await response.json();
+
+                    if (data && Array.isArray(data.rtp_streams)) {
+                        this.rtpStreams = data.rtp_streams;
+                    }
+
+                    if (data && Array.isArray(data.flow)) {
+                        this.sipFlowEntries = data.flow.map((entry, index) => ({
+                            ...entry,
+                            sequence: index,
+                            summary: this.formatSummary(entry.raw_message)
+                        }));
+                        if (this.sipFlowEntries.length && Number.isFinite(this.sipFlowEntries[0].timestamp)) {
+                            const firstTs = this.parseTimestamp(this.sipFlowEntries[0].timestamp);
+                            if (Number.isFinite(firstTs) && (!Number.isFinite(this.flowStartEpoch) || firstTs < this.flowStartEpoch)) {
+                                this.flowStartEpoch = firstTs;
+                            }
+                        }
+                        // Filter SIP messages and identify roles
+                        this.sipMessages = this.sipFlowEntries.filter(e =>
+                            e.msg_type === 'Sip' && e.raw_message && e.raw_message.trim()
+                        );
+                        this.identifyRoles();
+                        this.fixResponseDestinations();
+                    }
+                } catch (err) {
+                    console.error('Failed to fetch sip flow', err);
+                } finally {
+                    this.sipFlowLoading = false;
+                }
+            },
+
+            // Identify roles from SIP flow entries
+            identifyRoles() {
+                this.roleMap.clear();
+
+                if (!this.sipFlowEntries || this.sipFlowEntries.length === 0) {
+                    console.warn('No sipFlowEntries found');
+                    return;
+                }
+
+                // Filter only SIP messages
+                const sipMessages = this.sipFlowEntries.filter(e =>
+                    e.msg_type === 'Sip' && e.raw_message && e.raw_message.trim()
+                );
+
+                if (sipMessages.length === 0) {
+                    console.warn('No SIP messages found after filtering');
+                    return;
+                }
+
+                // Find the first INVITE (from Leg A to PBX)
+                const firstInvite = sipMessages.find(e =>
+                    e.raw_message.startsWith('INVITE')
+                );
+
+                if (firstInvite) {
+                    // Leg A is the source of first INVITE
+                    const legAAddr = this.normalizeAddr(firstInvite.src_addr);
+                    const legAPort = this.extractPort(firstInvite.src_addr);
+                    this.roleMap.set(legAAddr, 'leg-a');
+
+                    // PBX is the destination of first INVITE
+                    const pbxAddr = this.normalizeAddr(firstInvite.dst_addr);
+                    const pbxPort = this.extractPort(firstInvite.dst_addr);
+                    this.roleMap.set(pbxAddr, 'pbx');
+
+                    // Find PBX's INVITE to Leg B
+                    const pbxInvite = sipMessages.find(e =>
+                        this.normalizeAddr(e.src_addr) === pbxAddr &&
+                        e.raw_message.startsWith('INVITE') &&
+                        this.normalizeAddr(e.dst_addr) !== legAAddr
+                    );
+
+                    if (pbxInvite) {
+                        const legBAddr = this.normalizeAddr(pbxInvite.dst_addr);
+                        const legBPort = this.extractPort(pbxInvite.dst_addr);
+                        this.roleMap.set(legBAddr, 'leg-b');
+
+                        // Store ports for fallback matching
+                        this.rolePortMap = {
+                            'leg-a': legAPort,
+                            'pbx': pbxPort,
+                            'leg-b': legBPort
+                        };
+                    } else {
+                        this.rolePortMap = {
+                            'leg-a': legAPort,
+                            'pbx': pbxPort
+                        };
+                    }
+                } else {
+                    console.warn('No INVITE message found');
+                }
+            },
+
+            // Fix response destinations that are incorrectly marked as pbx->pbx
+            fixResponseDestinations() {
+                if (!this.sipMessages || this.sipMessages.length === 0) return;
+
+                // Track the last request from each participant
+                const lastRequestFrom = {};
+
+                this.sipMessages.forEach((msg) => {
+                    const srcRole = this.getRole(msg.src_addr);
+                    const dstRole = this.getRole(msg.dst_addr);
+                    const firstLine = msg.raw_message.split('\n')[0].trim();
+
+                    // Check if this is a request (starts with METHOD)
+                    const isRequest = /^[A-Z]+\s+/.test(firstLine);
+
+                    if (isRequest && srcRole && dstRole) {
+                        // Record that srcRole sent a request to dstRole
+                        lastRequestFrom[dstRole] = srcRole;
+                    }
+
+                    // Check if this is a response that goes pbx->pbx
+                    const isResponse = /^SIP\/\d\.\d\s+\d{3}/.test(firstLine);
+                    if (isResponse && srcRole === 'pbx' && dstRole === 'pbx') {
+                        // This is a response from PBX, figure out who should receive it
+                        // It should go back to whoever sent the last request to PBX
+                        const shouldGoTo = lastRequestFrom['pbx'];
+
+                        if (shouldGoTo) {
+                            // Mark this message with corrected destination
+                            msg._correctedDstRole = shouldGoTo;
+                        }
+                    }
+                });
+            },
+
+            // Extract port from address
+            extractPort(addr) {
+                if (!addr) return null;
+                const parts = addr.split('_').pop().split(':');
+                return parts.length > 1 ? parts[1] : null;
+            },
+
+            // Normalize address for comparison (keep IP:port for local scenarios)
+            normalizeAddr(addr) {
+                if (!addr) return '';
+                // Extract IP:port (handle formats like "A_192.168.1.1:5060" or "192.168.1.1:5060")
+                return addr.split('_').pop();
+            },
+
+            // Get role for an address
+            getRole(addr) {
+                const normalized = this.normalizeAddr(addr);
+                let role = this.roleMap.get(normalized);
+
+                // If not found by full address, try to match by port
+                if (!role && this.rolePortMap) {
+                    const port = this.extractPort(addr);
+                    if (port) {
+                        for (const [roleName, rolePort] of Object.entries(this.rolePortMap)) {
+                            if (port === rolePort) {
+                                role = roleName;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                return role || null;
+            },
+
+            // Extract SIP method from message
+            extractSipMethod(message) {
+                if (!message) return 'Unknown';
+
+                const lines = message.split('\n');
+                const firstLine = lines[0].trim();
+
+                // Request: "METHOD sip:..."
+                const requestMatch = firstLine.match(/^([A-Z]+)\s+/);
+                if (requestMatch) {
+                    return requestMatch[1];
+                }
+
+                // Response: "SIP/2.0 CODE Description"
+                const responseMatch = firstLine.match(/^SIP\/\d\.\d\s+(\d{3})\s*(.*)/);
+                if (responseMatch) {
+                    const code = responseMatch[1];
+                    let desc = responseMatch[2].trim();
+                    // Truncate long descriptions
+                    if (desc.length > 20) {
+                        desc = desc.substring(0, 17) + '...';
+                    }
+                    return `${code} ${desc}`;
+                }
+
+                return firstLine.substring(0, 50);
+            },
+
+            // Get message color class based on SIP method/status
+            getMessageColorClass(message) {
+                if (!message) return 'border-slate-200 bg-slate-50 text-slate-900';
+
+                const firstLine = message.split('\n')[0].trim();
+
+                // INVITE
+                if (firstLine.startsWith('INVITE')) {
+                    return 'border-sky-200 bg-sky-50 text-sky-900';
+                }
+
+                // BYE/CANCEL
+                if (firstLine.startsWith('BYE') || firstLine.startsWith('CANCEL')) {
+                    return 'border-slate-300 bg-slate-100 text-slate-900';
+                }
+
+                // ACK
+                if (firstLine.startsWith('ACK')) {
+                    return 'border-blue-200 bg-blue-50 text-blue-900';
+                }
+
+                // Response codes
+                const responseMatch = firstLine.match(/^SIP\/\d\.\d\s+(\d{3})/);
+                if (responseMatch) {
+                    const code = parseInt(responseMatch[1]);
+                    if (code < 200) return 'border-amber-200 bg-amber-50 text-amber-900'; // 1xx
+                    if (code < 300) return 'border-emerald-200 bg-emerald-50 text-emerald-900'; // 2xx
+                    if (code < 400) return 'border-blue-200 bg-blue-50 text-blue-900'; // 3xx
+                    return 'border-rose-200 bg-rose-50 text-rose-900'; // 4xx/5xx
+                }
+
+                return 'border-indigo-200 bg-indigo-50 text-indigo-900';
+            },
+
+            // Get message color class based on SIP method/status
+            getMessageColorClass(message) {
+                if (!message) return 'border-slate-200 bg-slate-50 text-slate-900';
+
+                const firstLine = message.split('\n')[0].trim();
+
+                // INVITE
+                if (firstLine.startsWith('INVITE')) {
+                    return 'border-sky-200 bg-sky-50 text-sky-900';
+                }
+
+                // BYE/CANCEL
+                if (firstLine.startsWith('BYE') || firstLine.startsWith('CANCEL')) {
+                    return 'border-slate-300 bg-slate-100 text-slate-900';
+                }
+
+                // ACK
+                if (firstLine.startsWith('ACK')) {
+                    return 'border-blue-200 bg-blue-50 text-blue-900';
+                }
+
+                // Response codes
+                const responseMatch = firstLine.match(/^SIP\/\d\.\d\s+(\d{3})/);
+                if (responseMatch) {
+                    const code = parseInt(responseMatch[1]);
+                    if (code < 200) return 'border-amber-200 bg-amber-50 text-amber-900'; // 1xx
+                    if (code < 300) return 'border-emerald-200 bg-emerald-50 text-emerald-900'; // 2xx
+                    if (code < 400) return 'border-blue-200 bg-blue-50 text-blue-900'; // 3xx
+                    return 'border-rose-200 bg-rose-50 text-rose-900'; // 4xx/5xx
+                }
+
+                return 'border-indigo-200 bg-indigo-50 text-indigo-900';
+            },
+
+            // Get participant label
+            getParticipantLabel(role) {
+                const participant = this.participants.find(p => p.role === role);
+                return participant?.address || (role === 'caller' ? 'Caller' : 'Callee');
+            },
+        }));
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,219 @@
+{% extends "console/layout.html" %}
+{% block title %}SSL Certificates · {{site_name|default('RustPBX')}}{% endblock %}
+{% block content %}
+<div class="p-6">
+    <div class="mx-auto max-w-7xl space-y-6" x-data="acmeManager()">
+
+        <!-- Header -->
+        <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-sky-600">Addon</p>
+                <h1 class="text-2xl font-semibold text-slate-900">SSL Certificates</h1>
+                <p class="text-sm text-slate-500">Manage your HTTPS and SIP TLS certificates via Let's Encrypt.</p>
+            </div>
+        </div>
+
+        <!-- Main Content Grid -->
+        <div class="grid gap-6 lg:grid-cols-2">
+
+            <!-- Request Form -->
+            <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+                <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <h2 class="text-base font-semibold text-slate-900">Request Certificate</h2>
+                        <p class="text-xs text-slate-500">Generate a new certificate for your domain.</p>
+                    </div>
+                </div>
+
+                <div class="mt-4 space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wide text-slate-400">Domain
+                            Name</label>
+                        <input type="text" x-model="domain"
+                            class="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                            placeholder="pbx.example.com">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wide text-slate-400">Email
+                            Address</label>
+                        <input type="email" x-model="email"
+                            class="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                            placeholder="admin@example.com">
+                    </div>
+
+                    <div class="space-y-3 pt-2">
+                        <label class="flex items-center gap-2 text-sm font-semibold text-slate-600">
+                            <input type="checkbox" x-model="enable_https"
+                                class="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500">
+                            <span>Enable HTTPS/WSS</span>
+                        </label>
+                        <p class="ml-6 text-xs text-slate-500 -mt-2">Update config to use this certificate for SSL/TLS.
+                        </p>
+
+                        <label class="flex items-center gap-2 text-sm font-semibold text-slate-600">
+                            <input type="checkbox" x-model="enable_sip_tls"
+                                class="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500">
+                            <span>Enable SIP TLS</span>
+                        </label>
+                        <p class="ml-6 text-xs text-slate-500 -mt-2">Enable SIP over TLS on port 5061.</p>
+                    </div>
+
+                    <div class="border-t border-slate-200 pt-4">
+                        <button @click="requestCert" :disabled="loading"
+                            class="inline-flex w-full items-center justify-center rounded-md bg-sky-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60">
+                            <span x-show="!loading">Request Certificate</span>
+                            <span x-show="loading">Processing...</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Status / Logs -->
+            <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+                <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <h2 class="text-base font-semibold text-slate-900">Operation Status</h2>
+                        <p class="text-xs text-slate-500">Real-time feedback from the ACME client.</p>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600 h-64 overflow-y-auto font-mono whitespace-pre-wrap"
+                        x-text="statusMessage || 'Ready to process requests.'">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Existing Certificates -->
+        <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+            <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                    <h2 class="text-base font-semibold text-slate-900">Existing Certificates</h2>
+                    <p class="text-xs text-slate-500">List of certificates managed by this addon.</p>
+                </div>
+            </div>
+            <div class="mt-4 overflow-x-auto">
+                <table class="min-w-full divide-y divide-slate-200 text-sm">
+                    <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        <tr>
+                            <th class="px-4 py-2">Domain</th>
+                            <th class="px-4 py-2">Path</th>
+                            <th class="px-4 py-2">Created At</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        {% for cert in certs %}
+                        <tr>
+                            <td class="px-4 py-3 font-medium text-slate-900">{{ cert.domain }}</td>
+                            <td class="px-4 py-3 text-slate-500 font-mono text-xs">{{ cert.path }}</td>
+                            <td class="px-4 py-3 text-slate-500">{{ cert.created_at }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="3" class="px-4 py-3 text-xs text-slate-400 text-center">No certificates found.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('acmeManager', () => ({
+            domain: '',
+            email: '',
+            enable_https: false,
+            enable_sip_tls: false,
+            loading: false,
+            statusMessage: '',
+            pollInterval: null,
+
+            init() {
+                // Check status on load in case a process is already running
+                this.pollStatus();
+            },
+
+            async requestCert() {
+                if (!this.domain || !this.email) {
+                    this.statusMessage = 'Please enter both domain and email.';
+                    return;
+                }
+                this.loading = true;
+                this.statusMessage = 'Starting request...';
+
+                try {
+                    const response = await fetch('/api/acme/request', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            domain: this.domain,
+                            email: this.email,
+                            enable_https: this.enable_https,
+                            enable_sip_tls: this.enable_sip_tls,
+                        }),
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Request failed');
+                    }
+
+                    const result = await response.json();
+                    // Start polling for updates
+                    this.pollStatus();
+
+                } catch (error) {
+                    this.statusMessage = 'Error: ' + error.message;
+                    this.loading = false;
+                }
+            },
+
+            async pollStatus() {
+                if (this.pollInterval) clearTimeout(this.pollInterval);
+
+                const check = async () => {
+                    try {
+                        const res = await fetch('/api/acme/status');
+                        const status = await res.json();
+
+                        // Handle Rust enum serialization: {"Running": "msg"} or "None"
+                        if (status === 'None') {
+                            this.loading = false;
+                            return;
+                        }
+
+                        if (status.Running) {
+                            this.loading = true;
+                            this.statusMessage = 'Running: ' + status.Running;
+                            this.pollInterval = setTimeout(check, 1000);
+                        } else if (status.Success) {
+                            this.loading = false;
+                            this.statusMessage = 'Success: ' + status.Success;
+                            if (this.enable_https || this.enable_sip_tls) {
+                                this.statusMessage += '\n\nIMPORTANT: You must RESTART the service to apply changes.';
+                            }
+                            // Optional: reload to see new certs
+                            // setTimeout(() => window.location.reload(), 2000);
+                        } else if (status.Error) {
+                            this.loading = false;
+                            this.statusMessage = 'Error: ' + status.Error;
+                        } else {
+                            this.loading = false;
+                        }
+                    } catch (e) {
+                        console.error('Poll error', e);
+                        this.loading = false;
+                    }
+                };
+
+                check();
+            }
+        }));
+    });
+</script>
+{% endblock %}
