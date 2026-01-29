@@ -53,8 +53,8 @@ jobs:
           longcat99/rustpbx:${{ github.run_number }}
           longcat99/rustpbx:${{ steps.extract-version.outputs.version }}-${{ github.run_number }}
           ${{ github.event_name == 'workflow_dispatch' && format('longcat99/rustpbx:{0}', github.event.inputs.tag) || '' }}
-          ${{ contains(github.event.head_commit.message, '[latest]') && 'longcat99/rustpbx:latest' || '' }}
-          ${{ contains(github.event.head_commit.message, '[latest]') && format('longcat99/rustpbx:{0}', steps.extract-version.outputs.version) || '' }}
+          longcat99/rustpbx:latest
+          longcat99/rustpbx:${{ steps.extract-version.outputs.version }}
 
     - name: Build Docker image (PR)
       if: github.event_name == 'pull_request'
