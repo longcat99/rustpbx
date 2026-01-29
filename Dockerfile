@@ -1,7 +1,8 @@
 FROM rust:bookworm AS rust-builder
 RUN apt-get update && apt-get install -y gcc-aarch64-linux-gnu libasound2-dev libopus-dev cmake
 RUN rustup target add aarch64-unknown-linux-gnu
-RUN echo '[target.aarch64-unknown-linux-gnu]' >> ~/.cargo/config.toml && \
+RUN mkdir -p ~/.cargo && \
+    echo '[target.aarch64-unknown-linux-gnu]' >> ~/.cargo/config.toml && \
     echo 'linker = "aarch64-linux-gnu-gcc"' >> ~/.cargo/config.toml
 RUN mkdir /build
 ADD . /build/
